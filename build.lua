@@ -1,7 +1,7 @@
 local root = "./PortOS"
 local file = fs.open("./PortOS/out.ete","w")
 
-function scanFile(path, fil)
+local function scanFile(path, fil)
 	if path == "./PortOS/.git" or path == "./PortOS/LICENSE" or path == "./PortOS/README.md" or path == "./PortOS/.gitignore" or path == "./PortOS/build.lua" or path == "./PortOS/Users" or path == "./PortOS/out.ete" then
 		return
 	end

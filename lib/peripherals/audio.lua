@@ -40,7 +40,7 @@ class 'audio' {
                 local speakerObject = peripheral.wrap(name)
                 local speaker = {
                     device = speakerObject,
-                    play = playAudio,
+                    play = audio.playAudio,
                     id = (os.epoch() + #self.speakers)
                 }
                 table.insert(self.speakers, speaker)
@@ -50,8 +50,8 @@ class 'audio' {
             local success, result = pcall(peripheral.getType, name)
             if success and result == "speaker" then
                 local speaker = {
-                    device = speakerObject,
-                    play = playAudio,
+                    device = name,
+                    play = audio.playAudio,
                     id = (os.epoch("utc") + #self.speakers)
                 }
                 table.insert(audio.speakers, speaker)

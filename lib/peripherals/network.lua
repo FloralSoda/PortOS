@@ -83,11 +83,11 @@ end
 network["receive"] = receive
 
 local function receiveAsync(self, callback, ...)
-    local callbackWrapper = function(...)
-        events:removeHandler("modem_message", callbackWrapper)
+    CallbackWrapper = function(...)
+        events:removeHandler("modem_message", CallbackWrapper)
         callback(...)
     end
-    events:addHandler("modem_message", callbackWrapper, ...)
+    events:addHandler("modem_message", CallbackWrapper, ...)
 end
 network["receiveAsync"] = receiveAsync
 
@@ -130,17 +130,17 @@ local function receiveChannelAsync(self, channel, callback, ...)
             error("Too many channels open (Max "..(self.maxChannels)..")", 2)
         else
             self:openChannel(channel)
-            local callbackWrapper = function(...)
+            CallbackWrapper = function(...)
                 local args = {...}
                 if args[3] == channel then
-                    events:removeHandler("modem_message", callbackWrapper)
+                    events:removeHandler("modem_message", CallbackWrapper)
                     if disable then
                         self:closeChannel(channel)
                     end
                     callback(...)
                 end
             end
-            events:addHandler("modem_message", callbackWrapper, ...)
+            events:addHandler("modem_message", CallbackWrapper, ...)
         end
     end
 end
@@ -167,12 +167,12 @@ network["buildPacket"] = buildPacket
 
 local function getFreeChannel(self)
     local packet = self.buildPacket(os.getComputerID(), "router", 0, "")
-    self.adapter.transmit(0, 0, protocol)
+    
     --TODO
 end
 network["getFreeChannel"] = getFreeChannel
 
 local function sendHandshake(self, channel, protocol, message)
-    self.adapter.transmit(channel, channel, 
+    self.adapter.transmit(channel, channel)
     --TODO
 end

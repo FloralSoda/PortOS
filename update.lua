@@ -1,3 +1,5 @@
+--The installer is currently found at https://pastebin.com/tKT0MVub
+
 local path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/out.ete"
 print("Downloading from github..")
 local request = http.get(path)
@@ -5,7 +7,7 @@ local ete = request.readAll()
 request.close()
 print("Data retrieved")
 
-function readETE(data)
+local function readETE(data)
 	local pathFlag = true
 	local fileLengthFlag = false
 	local fileDataFlag = false
@@ -34,14 +36,17 @@ function readETE(data)
 			end
 		elseif fileLengthFlag then
 			if symbol == "\"" then
-				fileLength = tonumber(table.concat(token, ""))
+                fileLength = tonumber(table.concat(token, "")) or -1
+				if fileLength == -1 then
+					error("ete file is corrupted or in a format the updater can't read. Please make sure you have the latest version of this file")
+				end
 				token = {}
 				fileLengthFlag = false
 				fileDataFlag = true
 				typ = 0
 			else
 				table.insert(token, symbol)
-			end 
+			end
 		elseif fileDataFlag then
 			if typ == 0 then
 				if symbol == "F" then

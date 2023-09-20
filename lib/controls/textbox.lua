@@ -1,4 +1,4 @@
-control = require(".PortOS.lib.controls.control")
+local control = require(".PortOS.lib.controls.control")
 
 class 'textbox' 'control' {
     Text = "",
@@ -225,4 +225,5 @@ class 'textbox' 'control' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return textbox

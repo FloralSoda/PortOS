@@ -1,4 +1,4 @@
-Control = require(".PortOS.lib.controls.control")
+local control = require(".PortOS.lib.controls.control")
 
 -- Properties and Class Definition
 class 'app' {
@@ -113,9 +113,9 @@ class 'app' {
                 local inYBounds = control.bounds.Top <= y and control.bounds.Top + control.bounds.Height - 1 >= y
 
                 if inXBounds and inYBounds then
-                    if focusedControl then
-                        if focusedControl.unfocus then
-                            focusedControl:unfocus(control)
+                    if self.focusedControl then
+                        if self.focusedControl.unfocus then
+                            self.focusedControl:unfocus(control)
                         end
                     end
                     local data = {
@@ -126,19 +126,19 @@ class 'app' {
                     }
 
                     self.mouseclick:invoke(control, data)
-                    focusedControl = control
+                    self.focusedControl = control
                     hitControl = true
                     break
                 end
             end
         end
         if not hitControl then
-            if focusedControl then
-                if focusedControl.unfocus then
-                    focusedControl:unfocus(control)
+            if self.focusedControl then
+                if self.focusedControl.unfocus then
+                    self.focusedControl:unfocus(control)
                 end
             end
-            focusedControl = nil
+            self.focusedControl = nil
 
             local data = {
                 scroll = event == "mouse_scroll",
@@ -154,21 +154,21 @@ class 'app' {
         events:addHandler("mouse_scroll", self._mouseClickHandler, self)
     end,
     unhandleMouse = function(self)
-        events:removeHandler("mouse_click", self._mouseClickHandler, self)
-        events:removeHandler("mouse_scroll", self._mouseClickHandler, self)
+        events:removeHandler("mouse_click", self._mouseClickHandler)
+        events:removeHandler("mouse_scroll", self._mouseClickHandler)
     end,
 
     -- Elements
-    addControl = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
-            error("Expected type extending Control, got "..typeof(control), 2)
+    addControl = function(self, ctrl)
+        if ctrl.extends == nil or not ctrl:extends(control) then
+            error("Expected type extending Control, got "..typeof(ctrl), 2)
         end
-        control[".screenuuid"] = os.epoch("utc") - #self.controls
-        table.insert(self.controls, control)
-        control:bind(self)
+        ctrl[".screenuuid"] = os.epoch("utc") - #self.controls
+        table.insert(self.controls, ctrl)
+        ctrl:bind(self)
     end,
     removeControl = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
+        if control.extends == nil or not control:extends(control) then
             error("Expected type extending Control, got "..typeof(control), 2)
         end
         local loc = -1
@@ -195,7 +195,7 @@ class 'app' {
         end
     end,
     containsControl = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
+        if control.extends == nil or not control:extends(control) then
             error("Expected type extending Control, got "..typeof(control), 2)
         end
         if control[".screenuuid"] then
@@ -216,7 +216,7 @@ class 'app' {
         self.focusedControl = nil
     end,
     bringToFront = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
+        if control.extends == nil or not control:extends(control) then
             error("Expected type extending Control, got "..typeof(control), 2)
         end
         for idx, c in pairs(self.controls) do
@@ -228,7 +228,7 @@ class 'app' {
         table.insert(self.controls, control)
     end,
     pushToBack = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
+        if control.extends == nil or not control:extends(control) then
             error("Expected type extending Control, got "..typeof(control), 2)
         end
         for idx, c in pairs(self.controls) do
@@ -258,10 +258,30 @@ class 'app' {
     end,
     stop = function(self)
         if self.threadId then
-            screen:unhandleMouse()
+            self:unhandleMouse()
             threading:killThread(self["threadId"])
-            screen:clear()
+            self:clear()
+            self.threadId = nil
+        end
+    end,
+    pause = function(self)
+        if self.threadId and not self.paused then
+            self:unhandleMouse()
+            self.paused = true
+
+            threading:pauseThread(self.threadId)
+        end
+    end,
+    resume = function(self)
+        if self.threadId and self.paused then
+            self:handleMouse()
+            self:invalidate()
+
+            threading:resumeThread(self.threadId)
+            self.paused = false
+        else
         end
     end
 }
+---@diagnostic disable-next-line: undefined-global
 return app

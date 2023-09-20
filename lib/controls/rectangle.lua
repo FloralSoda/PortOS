@@ -11,9 +11,8 @@ class 'rectangle' 'control' {
             Width = 8,
             Height = 3
         }
-
-        return output
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return rectangle

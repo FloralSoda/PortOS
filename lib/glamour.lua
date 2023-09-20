@@ -17,6 +17,7 @@ class 'glamour' {
             local sb = new 'stringbuilder'("{\n")
             for key, value in pairs(tbl) do
                 local line = string.rep(tabchar, tab)
+---@diagnostic disable-next-line: undefined-global
                 line = line .. tostring(key) .. ": " .. glamour.formatTable(value, depth - 1, tabchar, tab + 2)
                 sb:appendLine(line)
             end
@@ -36,4 +37,5 @@ class 'glamour' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return glamour

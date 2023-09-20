@@ -41,4 +41,5 @@ class 'rect' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return rect

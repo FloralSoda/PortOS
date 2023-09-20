@@ -1,4 +1,4 @@
-control = require(".PortOS.lib.controls.control")
+local control = require(".PortOS.lib.controls.control")
 class 'explorer' 'control' {
     NoFilesMessage = "There aren't any files here",
     selectedColor = colors.lightBlue,
@@ -55,6 +55,7 @@ class 'explorer' 'control' {
         term.setTextColor(self.textColor)
 
         if fs.exists(self.fileLocation) and fs.isDir(self.fileLocation) then
+---@diagnostic disable-next-line: undefined-global
             local files = explorer.sortDirectory(self.fileLocation, fs.list(self.fileLocation))
 
             local upper = math.min(self.scroll + self.bounds.Height - 3, #files)
@@ -155,23 +156,36 @@ class 'explorer' 'control' {
             end
         end
     end,
-    openFile = function(path)
+    openFile = function(self, path)
         if path and fs.exists(path) then
-            shell.run(registry.getFileHandler(path:sub(-4)), path)
-            return true
+            local fileHandler = registry.getFileHandler(path:sub(-4))
+            if fileHandler then
+                print(self[".parentScreen"])
+                threading:startThread(function()
+                    shell.run(fileHandler, path)
+                    if self then
+                        self[".parentScreen"]:resume()
+                        self[".parentScreen"]:invalidate(true)
+                    end
+                end)
+                if self then
+                    self[".parentScreen"]:pause()
+                end
+                return true
+            else
+                return false, "File type has no handler"
+            end
         else
             return false, "Path could not be found"
         end
     end,
     new = function(this, default)
-
         this {
             fileLocation = default or "/PortOS",
             changeDirectory = events:createEvent(),
             selectFile = events:createEvent(),
             history = {},
-            future = {},
-            openFile = explorer.openFile
+            future = {}
         }
         this.bounds {
             Top = 1,
@@ -184,4 +198,5 @@ class 'explorer' 'control' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return explorer

@@ -8,7 +8,7 @@ print("Checking for updates")
 print("Starting OS..")
 threading:killAllThreads()
 
-function runShell()
+local function runShell()
     term.clear()
     term.setCursorPos(1, 1)
     shell.run("shell")
@@ -18,7 +18,7 @@ function runShell()
 end
 
 threading:startThread(events.acceptEvents, events)
-threading:startThread(shell.run, "test")
+threading:startThread(shell.run, "./PortOS/bin/ux/explorer")
 -- threading:startThread(runShell)
 
 threading:startThreadProcessor()

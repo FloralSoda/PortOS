@@ -123,4 +123,5 @@ class 'stringbuilder' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return stringbuilder
