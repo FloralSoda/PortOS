@@ -9,6 +9,8 @@ local function addHandler(self, event, delegate, ...)
     end
     if type(event) == "table" then
         event = event.id
+    elseif type(event) ~= "string" then
+        error("Event expected to be a table or a string. Found "..type(event), 2)
     end
     if type(self[event]) ~= "table" then
         self[event] = {}
