@@ -4,23 +4,42 @@ local threading = {
 }
 
 local function startThread(self, delegate, ...)
-    thread = {}
+    local thread = {}
     thread["coroutine"] = coroutine.create(function()
-        delegate(unpack(arg))
+        delegate(table.unpack(arg))
     end)
     thread["id"] = os.epoch()
 
     table.insert(self.threads, thread)
-    return id
+    return thread["id"]
 end
 threading["startThread"] = startThread
+
+local function pauseThread(self, id)
+    for idx, thread in pairs(self.threads) do
+        if thread.id == id then
+            coroutine.yield(thread.coroutine)
+            return self.threads.coroutine
+        end
+    end
+end
+threading["pauseThread"] = pauseThread
+local function resumeThread(self, id)
+    for idx, thread in pairs(self.threads) do
+        if thread.id == id then
+            coroutine.resume(thread.coroutine)
+            return self.threads.coroutine
+        end
+    end
+end
+threading["resumeThread"] = resumeThread
 
 local function killThread(self, id)
     for idx, thread in pairs(self.threads) do
         if thread.id == id then
             coroutine.yield(thread.coroutine)
             table.remove(self.threads, idx)
-            return threads.coroutine
+            return self.threads.coroutine
         end
     end
     return nil

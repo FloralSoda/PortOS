@@ -22,4 +22,5 @@ class 'label' 'control' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return label

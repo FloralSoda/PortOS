@@ -1,4 +1,4 @@
-control = require(".PortOS.lib.controls.control")
+local control = require(".PortOS.lib.controls.control")
 class 'explorer' 'control' {
     NoFilesMessage = "There aren't any files here",
     selectedColor = colors.lightBlue,
@@ -12,6 +12,12 @@ class 'explorer' 'control' {
     timetravel = false,
 
     sortDirectory = function(parent, fileList)
+        if type(parent) ~= "string" then
+            error("Parameter 1 'parent' expected type string, got "..typeof(parent), 2)
+        elseif typeof(fileList) ~= "table" then
+            error("Parameter 2 'fileList' expected type table, got "..typeof(fileList), 2)
+        end
+
         local folders = {}
         local files = {}
         for _, file in pairs(fileList) do
@@ -49,6 +55,7 @@ class 'explorer' 'control' {
         term.setTextColor(self.textColor)
 
         if fs.exists(self.fileLocation) and fs.isDir(self.fileLocation) then
+---@diagnostic disable-next-line: undefined-global
             local files = explorer.sortDirectory(self.fileLocation, fs.list(self.fileLocation))
 
             local upper = math.min(self.scroll + self.bounds.Height - 3, #files)
@@ -84,7 +91,14 @@ class 'explorer' 'control' {
         end
     end,
     navigate = function(self, location)
+        if type(location) ~= "string" then
+            error("Parameter 2 'location' expected type string, got "..typeof(location), 2)
+        end
+
         if location and fs.exists(location) then
+            if location == self.fileLocation then
+                return false, "The explorer is already at this location"
+            end
             if fs.isDir(location) then
                 if self.timetravel then
                     self.timetravel = false
@@ -100,8 +114,10 @@ class 'explorer' 'control' {
                 self.selectFile:invoke(self, location)
             end
             self.updateGraphics = true
+
+            return true
         else
-            error("File location could not be found", 2)
+            return false, "The location could not be found"
         end
     end,
     navigateBack = function(self)
@@ -110,7 +126,7 @@ class 'explorer' 'control' {
             local togo = self.history[#self.history]
             self.history[#self.history] = nil
             table.insert(self.future, self.fileLocation)
-            self:navigate(togo)
+            return self:navigate(togo)
         end
     end,
     navigateNext = function(self)
@@ -119,7 +135,7 @@ class 'explorer' 'control' {
             local togo = self.future[#self.future]
             self.future[#self.future] = nil
             table.insert(self.history, self.fileLocation)
-            self:navigate(togo)
+            return self:navigate(togo)
         end
     end,
     click = function(self, _, data)
@@ -140,22 +156,36 @@ class 'explorer' 'control' {
             end
         end
     end,
-    openFile = function(path)
+    openFile = function(self, path)
         if path and fs.exists(path) then
-            shell.run(registry.getFileHandler(path:sub(-4)), path)
+            local fileHandler = registry.getFileHandler(path:sub(-4))
+            if fileHandler then
+                print(self[".parentScreen"])
+                threading:startThread(function()
+                    shell.run(fileHandler, path)
+                    if self then
+                        self[".parentScreen"]:resume()
+                        self[".parentScreen"]:invalidate(true)
+                    end
+                end)
+                if self then
+                    self[".parentScreen"]:pause()
+                end
+                return true
+            else
+                return false, "File type has no handler"
+            end
         else
-            error("Path could not be found", 2)
+            return false, "Path could not be found"
         end
     end,
     new = function(this, default)
-
         this {
             fileLocation = default or "/PortOS",
             changeDirectory = events:createEvent(),
             selectFile = events:createEvent(),
             history = {},
-            future = {},
-            openFile = explorer.openFile
+            future = {}
         }
         this.bounds {
             Top = 1,
@@ -168,4 +198,5 @@ class 'explorer' 'control' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return explorer

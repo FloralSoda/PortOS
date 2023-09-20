@@ -1,4 +1,4 @@
-control = require(".PortOS.lib.controls.control")
+local control = require(".PortOS.lib.controls.control")
 
 class 'button' 'control' {
     Text = "Button",
@@ -28,4 +28,5 @@ class 'button' 'control' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return button

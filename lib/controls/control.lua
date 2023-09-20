@@ -5,7 +5,7 @@ class 'control' {
     updateGraphics = true,
 
     clickHandler = function(self, _, control, data)
-        if control and control[".screenuuid"] == self[".screenuuid"] then
+        if control and type(control) == "table" and control[".screenuuid"] == self[".screenuuid"] then
             self.Click:invoke(data)
         end
     end,

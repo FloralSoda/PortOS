@@ -1,4 +1,4 @@
-control = require(".PortOS.lib.controls.control")
+local control = require(".PortOS.lib.controls.control")
 
 class 'textbox' 'control' {
     Text = "",
@@ -221,7 +221,9 @@ class 'textbox' 'control' {
             Width = 10,
             Height = 3
         }
+        events:addHandler(this.Click, this.click, this)
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return textbox

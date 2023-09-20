@@ -3,7 +3,7 @@
 ---@param self table
 ---@param classB table
 local extends = function(self, classB)
-    if not type(classB) or not classB[".className"] then
+    if type(classB) ~= "table" or  not classB[".className"] then
         error("Second argument expected a class, got " .. type(classB), 2)
     end
     if table.find(self[".classBases"], classB[".className"]) then
@@ -103,13 +103,13 @@ local buildClass = function(name, classDefinition, env)
     return classDefinition
 end
 
-classDef = function(name, classDefinition, inheritance, env)
+ClassDef = function(name, classDefinition, inheritance, env)
     inheritance = inheritance or {}
 
     if type(classDefinition) == "string" then
         return function(cl)
             table.insert(inheritance, classDefinition)
-            return classDef(name, cl, inheritance, env)
+            return ClassDef(name, cl, inheritance, env)
         end
     elseif type(classDefinition) == "table" then
         if not classDefinition[".classBases"] then
@@ -128,25 +128,29 @@ end
 -- class 'myClass' 'yourClass'.. { ... }
 ---Defines a class with a c#-like syntax
 ---@param name string
+---@diagnostic disable-next-line: duplicate-set-field
 _G["class"] = function(name, env)
+    --TODO: getfenv is deprecated. Need to figure out how to implement this in a non-deprecated way
     local env = type(env) == "table" and env or getfenv(2)
     if env[name] then
         error(string.format("Class with name %q already exists", name), 2)
     end
 
     return function(cl)
-        return classDef(name, cl, {}, env)
+        return ClassDef(name, cl, {}, env)
     end
 end
 
 --- Generates a new instance of the class
 ---@param cl string|table
 ---@param env? table
+---@diagnostic disable-next-line: duplicate-set-field
 _G["new"] = function(cl, env)
     if type(cl) == "string" then
+        --TODO: getfenv is deprecated. Must figure out how to implement this in 5.2
         env = env or getfenv(2)
         if type(env[cl]) == "table" and type(env[cl][".ctor"]) == "function" then
-            def = env[cl]
+            local def = env[cl]
             if type(env[cl].new) ~= "function" then
                 error("Cannot instance a static class (no \"new\" function)", 2)
             end
@@ -169,6 +173,7 @@ _G["new"] = function(cl, env)
 end
 
 --- Gets the type of the object
+---@diagnostic disable-next-line: duplicate-set-field
 _G["typeof"] = function(a)
     if a and type(a) == "table" and type(a[".className"]) == "string" then
         if a[".instance"] then
@@ -181,6 +186,7 @@ _G["typeof"] = function(a)
 end
 
 --- Marks a table to not be recreated when instancing a new object
+---@diagnostic disable-next-line: duplicate-set-field
 _G["static"] = function(tbl)
     if type(tbl) == "table" then
         tbl[".PORTOS-STATIC_TBL"] = true

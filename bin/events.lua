@@ -91,13 +91,13 @@ local function processEvent(self, event, eventData)
     end
 end
 local function acceptEvents(self)
-    handleEvents = true
-    while handleEvents do
+    self.handleEvents = true
+    while self.handleEvents do
         local eventData = {os.pullEvent()}
         local event = eventData[1]
 
         if event == ".portOS_cancelEvent" then
-            handleEvents = false
+            self.handleEvents = false
             break
         else
             if self[event] then

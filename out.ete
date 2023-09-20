@@ -1,4 +1,137 @@
-./PortOS"3"D./PortOS/bin"8"D./PortOS/bin/apps"1"D./PortOS/bin/apps/notepad"1"D./PortOS/bin/apps/notepad/main.lua"0"F./PortOS/bin/boot.lua"570"Fterm.clear()
+./PortOS"3"D./PortOS/bin"10"D./PortOS/bin/.bashrc"1050"F# ~/.bashrc: executed by bash for non-login shells
+# this .bashrc is made for PortOS and may not reflect 100% accurately on other systems.
+# conversely, other systems' .bashrc may not reflect 100% accurately on PortOS.
+
+# If not running interactively, don't do anything
+[ -z *$PS1* ] && return
+
+# don't put duplicate lines in the history
+# ... of force ignoredups and ignorespace
+HISTCONTROL=ignoredups:ignorespace
+
+#append to the history file, don't overwrite it
+shopt -s histappend
+
+# for setting history length see HISTSIZE and HISTFILESIZE
+HISTSIZE=1000
+HISTFILESIZE=2000
+
+# check the window size after each command and, if necessary,
+# update the values of LINES and COLUMNS
+shopt -s checkwinsize
+
+# make less more friendly for non-text input files
+[ -x  /usr/bin/lesspipe ] && eval *$(SHELL=/bin/bash lesspipe)
+
+# Uncomment for a colored prompt, if the terminal has the capability;
+# turned off by default to not distract the user: the focus in a terminal
+# window should be on the output of commands, not on the prompt
+#force_color_prompt=yes
+./PortOS/bin/apps"1"D./PortOS/bin/apps/notepad"1"D./PortOS/bin/apps/notepad/main.lua"0"F./PortOS/bin/bash.lua"2651"F--This must not rely on PortOS systems as this is the fallback in case anything breaks.
+local args = {...}
+
+if #args > 1 then
+	
+end
+
+--Not using actual root for the root directory. This is to keep PortOS
+--self contained, in case users don't want the OS taking over the whole PC
+local root = "./PortOS/root"
+
+local running = true
+local insert = false
+local caretPosition = 1
+local currentToken = {}
+local posix = false
+
+local function split_string(str)
+	local output = {}
+	for idx,char in pairs(str) do
+		output[idx] = char
+	end
+
+	return output
+end
+
+local function parseArguments(arguments)
+	local aliases = {
+		["--dump-strings"] = "-d",
+		["--verbose"] = "-v",
+		["--init-file"] = "--rcfile"
+	}
+
+	local expect_args = {}
+	local printHelp = false
+	local dump_strings = false
+	local options = true
+
+	for _,arg in pairs(arguments) do
+		if options then
+			local current = aliases[arg] or arg
+			local islong = current:sub(2,2) == "-"
+			current = (islong and current:sub(3) or current:sub(1)):lower()
+			if current == "help" then
+				printHelp = true
+			elseif current == "d" then
+				dump_strings = true
+			elseif current == "rcfile" then
+				table.insert(expect_args, "rcfile")
+			elseif not islong then
+				for _,c in pairs(split_string(current)) do
+					table.insert(arguments, "-"..c)
+				end
+			else --It's long and not a recognised argument above
+				write("Unknown symbol \"--", current, "\"")
+			end
+		end
+	end
+end
+
+local function parseCommand(command)
+	command = command or currentToken
+
+	for _,ch in pairs(command) do
+		if ch == "#" then
+			break
+		end
+	end
+end
+
+local function listenForInput()
+	while running do
+		local data = {os.pullEvent("key")}
+
+		if data[2] == keys.enter or data[2] == keys.numPadEnter then
+			parseCommand()
+		elseif data[2] == keys.home then
+			caretPosition = 1
+		elseif data[2] == keys["end"] then
+			caretPosition = #currentToken
+		elseif data[2] == keys.insert then
+			insert = not insert
+		elseif data[2] == keys.delete and caretPosition < #currentToken then
+			table.remove(currentToken, caretPosition + 1)
+		elseif data[2] == keys.backspace and caretPosition > 1 then
+			table.remove(currentToken, caretPosition)
+			caretPosition = caretPosition - 1
+		elseif data[2] == keys.left and caretPosition > 1 then
+			caretPosition = caretPosition - 1
+		elseif data[2] == keys.right and caretPosition < #currentToken then
+			caretPosition = caretPosition + 1
+		else
+			local toAdd = keys.getName(data[2])
+			if #toAdd == 1 then
+				if insert then
+					currentToken[caretPosition] = toAdd
+				else
+					table.insert(currentToken, toAdd, caretPosition)
+				end
+				caretPosition = caretPosition + 1
+			end
+		end
+	end
+end
+./PortOS/bin/boot.lua"596"Fterm.clear()
 term.setCursorPos(1, 1)
 print("Loading libraries..")
 shell.run("PortOS/bin/setup.lua")
@@ -8,7 +141,7 @@ print("Checking for updates")
 print("Starting OS..")
 threading:killAllThreads()
 
-function runShell()
+local function runShell()
     term.clear()
     term.setCursorPos(1, 1)
     shell.run("shell")
@@ -18,7 +151,7 @@ function runShell()
 end
 
 threading:startThread(events.acceptEvents, events)
-threading:startThread(shell.run, "test")
+threading:startThread(shell.run, "./PortOS/bin/ux/explorer")
 -- threading:startThread(runShell)
 
 threading:startThreadProcessor()
@@ -52,7 +185,7 @@ if url then
 else
     error("Usage: download <URL>")
 end
-./PortOS/bin/events.lua"3025"Flocal events = {
+./PortOS/bin/events.lua"3040"Flocal events = {
     handleEvents = false,
     threads = {}
 }
@@ -145,13 +278,13 @@ local function processEvent(self, event, eventData)
     end
 end
 local function acceptEvents(self)
-    handleEvents = true
-    while handleEvents do
+    self.handleEvents = true
+    while self.handleEvents do
         local eventData = {os.pullEvent()}
         local event = eventData[1]
 
         if event == ".portOS_cancelEvent" then
-            handleEvents = false
+            self.handleEvents = false
             break
         else
             if self[event] then
@@ -213,7 +346,164 @@ require(".PortOS.lib.data.table")
 -- require(".PortOS.lib.data.string")
 _G["threading"] = require(".PortOS.lib.threading")
 _G["events"] = require(".PortOS.bin.events")
-./PortOS/bin/ux"0"D./PortOS/lib"7"D./PortOS/lib/controls"7"D./PortOS/lib/controls/application.lua"8880"FControl = require(".PortOS.lib.controls.control")
+./PortOS/bin/ux"2"D./PortOS/bin/ux/entry.lua"219"Flocal app = require(".PortOS.lib.controls.application")
+local textbox = require(".PortOS.lib.controls.textbox")
+local label = require(".PortOS.lib.controls.label")
+local button = require(".PortOS.lib.controls.button")
+
+./PortOS/bin/ux/explorer.lua"3259"Flocal glamour = require(".PortOS.lib.glamour")
+local explorer = require(".PortOS.lib.controls.explorer")
+local button = require(".PortOS.lib.controls.button")
+local textbox = require(".PortOS.lib.controls.textbox")
+local label = require(".PortOS.lib.controls.label")
+local rectangle = require(".PortOS.lib.controls.rectangle")
+local app = require(".PortOS.lib.controls.application")
+
+term.setCursorBlink(false)
+
+local function checkFileOpeners()
+    if registry.getFileHandler(".lua") == nil then
+        registry.addFileHandler(".lua", "edit")
+    end
+
+    registry.save()
+end
+
+checkFileOpeners()
+local myTextbox = new 'textbox'() {
+    ShowBorder = true,
+    Text = "/PortOS"
+}
+myTextbox.bounds {
+    Top = 2,
+    Height = 3,
+    Width = 51
+}
+
+local myExplorer = new 'explorer'()
+myExplorer.bounds {
+    Width = 51,
+    Height = 15,
+    Top = 5
+}
+
+local myButton = new 'button'() {
+    Text = "X",
+    Background = colors.red,
+    Foreground = colors.white
+}
+myButton.bounds {
+    Left = 51,
+    Top = 1,
+    Width = 1,
+    Height = 1
+}
+
+local btnBack = new 'button'() {
+    Text = " <",
+    Background = colors.gray,
+    Foreground = colors.black
+}
+btnBack.bounds {
+    Top = 1,
+    Width = 2,
+    Height = 1,
+    Left = 1
+}
+
+local btnNext = new 'button'() {
+    Text = "> ",
+    Background = colors.gray,
+    Foreground = colors.black
+}
+btnNext.bounds {
+    Top = 1,
+    Width = 2,
+    Height = 1,
+    Left = 4
+}
+
+local lblSep = new 'label'() {
+    Text = "|",
+    Background = colors.lightGray
+}
+lblSep.bounds {
+    Top = 1,
+    Left = 3,
+    Width = 1
+}
+
+local rctBack = new 'rectangle'() {
+    Background = colors.lightGray
+}
+rctBack.bounds {
+    Top = 1,
+    Left = 6,
+    Width = 46,
+    Height = 1
+}
+
+local lblTitle = new 'label'() {
+    Text = "File Explorer",
+    Background = colors.lightGray,
+    Foreground = colors.black
+}
+lblTitle.bounds {
+    Top = 1,
+    Left = 7
+}
+
+local function onChangeDirectory(_, _, _, prev)
+    myTextbox.Text = myExplorer.fileLocation
+    myTextbox.updateGraphics = true
+    btnBack.Background = #myExplorer.history > 0 and colors.lightGray or colors.gray
+    btnBack.updateGraphics = true
+    btnNext.Background = #myExplorer.future > 0 and colors.lightGray or colors.gray
+    btnNext.updateGraphics = true
+end
+local function close()
+    threading:stopThreadProcessor()
+    Screen:stop()
+end
+local function navigate(_, _, key)
+    if key == keys.enter then
+        myExplorer:navigate(myTextbox.Text)
+    end
+end
+local function back()
+    myExplorer:navigateBack()
+end
+local function nxt()
+    myExplorer:navigateNext()
+end
+local function handleFileOpen(_, _, file)
+    myExplorer:openFile(file)
+    print("guh")
+    sleep(2)
+end
+
+
+events:addHandler(btnBack.Click, back)
+events:addHandler(btnNext.Click, nxt)
+events:addHandler(myTextbox.KeyPressed, navigate)
+events:addHandler(myExplorer.changeDirectory, onChangeDirectory)
+events:addHandler(myButton.Click, close)
+events:addHandler(myExplorer.selectFile, handleFileOpen)
+Screen = new 'app'()
+Screen.Background = colors.white
+
+Screen:addControl(myExplorer)
+Screen:addControl(myTextbox)
+Screen:addControl(btnBack)
+Screen:addControl(btnNext)
+Screen:addControl(lblSep)
+Screen:addControl(rctBack)
+Screen:addControl(myButton)
+
+Screen:addControl(lblTitle)
+
+Screen:run()
+./PortOS/lib"7"D./PortOS/lib/controls"7"D./PortOS/lib/controls/application.lua"9958"Flocal control = require(".PortOS.lib.controls.control")
 
 -- Properties and Class Definition
 class 'app' {
@@ -221,7 +511,6 @@ class 'app' {
     _oldBounds = {},
     Background = colors.black,
     focusedControl = nil,
-    mouseclick = events:createEvent(),
 
     -- Rendering
     getControlsInRect = function(controls, rect)
@@ -329,9 +618,9 @@ class 'app' {
                 local inYBounds = control.bounds.Top <= y and control.bounds.Top + control.bounds.Height - 1 >= y
 
                 if inXBounds and inYBounds then
-                    if focusedControl then
-                        if focusedControl.unfocus then
-                            focusedControl:unfocus(control)
+                    if self.focusedControl then
+                        if self.focusedControl.unfocus then
+                            self.focusedControl:unfocus(control)
                         end
                     end
                     local data = {
@@ -342,19 +631,19 @@ class 'app' {
                     }
 
                     self.mouseclick:invoke(control, data)
-                    focusedControl = control
+                    self.focusedControl = control
                     hitControl = true
                     break
                 end
             end
         end
         if not hitControl then
-            if focusedControl then
-                if focusedControl.unfocus then
-                    focusedControl:unfocus(control)
+            if self.focusedControl then
+                if self.focusedControl.unfocus then
+                    self.focusedControl:unfocus(control)
                 end
             end
-            focusedControl = nil
+            self.focusedControl = nil
 
             local data = {
                 scroll = event == "mouse_scroll",
@@ -370,21 +659,21 @@ class 'app' {
         events:addHandler("mouse_scroll", self._mouseClickHandler, self)
     end,
     unhandleMouse = function(self)
-        events:removeHandler("mouse_click", self._mouseClickHandler, self)
-        events:removeHandler("mouse_scroll", self._mouseClickHandler, self)
+        events:removeHandler("mouse_click", self._mouseClickHandler)
+        events:removeHandler("mouse_scroll", self._mouseClickHandler)
     end,
 
     -- Elements
-    addControl = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
-            error("Expected type extending Control, got "..typeof(control), 2)
+    addControl = function(self, ctrl)
+        if ctrl.extends == nil or not ctrl:extends(control) then
+            error("Expected type extending Control, got "..typeof(ctrl), 2)
         end
-        control[".screenuuid"] = os.epoch("utc") - #self.controls
-        table.insert(self.controls, control)
-        control:bind(self)
+        ctrl[".screenuuid"] = os.epoch("utc") - #self.controls
+        table.insert(self.controls, ctrl)
+        ctrl:bind(self)
     end,
     removeControl = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
+        if control.extends == nil or not control:extends(control) then
             error("Expected type extending Control, got "..typeof(control), 2)
         end
         local loc = -1
@@ -411,7 +700,7 @@ class 'app' {
         end
     end,
     containsControl = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
+        if control.extends == nil or not control:extends(control) then
             error("Expected type extending Control, got "..typeof(control), 2)
         end
         if control[".screenuuid"] then
@@ -432,7 +721,7 @@ class 'app' {
         self.focusedControl = nil
     end,
     bringToFront = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
+        if control.extends == nil or not control:extends(control) then
             error("Expected type extending Control, got "..typeof(control), 2)
         end
         for idx, c in pairs(self.controls) do
@@ -444,7 +733,7 @@ class 'app' {
         table.insert(self.controls, control)
     end,
     pushToBack = function(self, control)
-        if control.extends == nil or not control:extends(Control) then
+        if control.extends == nil or not control:extends(control) then
             error("Expected type extending Control, got "..typeof(control), 2)
         end
         for idx, c in pairs(self.controls) do
@@ -456,12 +745,52 @@ class 'app' {
         table.insert(self.controls, 1, control)
     end,
 
+    -- Control
     new = function(this)
+        this {
+            mouseclick = events:createEvent()
+        }
+    end,
+    run = function(self)
+        if self.threadId then
+            error("Application was already running! Create a copy if you want two", 2)
+        end
 
+        self:handleMouse()
+        self:invalidate()
+
+        self["threadId"] = threading:startTimer(0, self.draw, self)
+    end,
+    stop = function(self)
+        if self.threadId then
+            self:unhandleMouse()
+            threading:killThread(self["threadId"])
+            self:clear()
+            self.threadId = nil
+        end
+    end,
+    pause = function(self)
+        if self.threadId and not self.paused then
+            self:unhandleMouse()
+            self.paused = true
+
+            threading:pauseThread(self.threadId)
+        end
+    end,
+    resume = function(self)
+        if self.threadId and self.paused then
+            self:handleMouse()
+            self:invalidate()
+
+            threading:resumeThread(self.threadId)
+            self.paused = false
+        else
+        end
     end
 }
+---@diagnostic disable-next-line: undefined-global
 return app
-./PortOS/lib/controls/button.lua"1004"Fcontrol = require(".PortOS.lib.controls.control")
+./PortOS/lib/controls/button.lua"1061"Flocal control = require(".PortOS.lib.controls.control")
 
 class 'button' 'control' {
     Text = "Button",
@@ -491,15 +820,16 @@ class 'button' 'control' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return button
-./PortOS/lib/controls/control.lua"735"Flocal rect = require ".PortOS.lib.data.rect"
+./PortOS/lib/controls/control.lua"764"Flocal rect = require ".PortOS.lib.data.rect"
 class 'control' {
     bounds = new 'rect'(1, 1, 1, 1),
     Enabled = true,
     updateGraphics = true,
 
     clickHandler = function(self, _, control, data)
-        if control and control[".screenuuid"] == self[".screenuuid"] then
+        if control and type(control) == "table" and control[".screenuuid"] == self[".screenuuid"] then
             self.Click:invoke(data)
         end
     end,
@@ -518,7 +848,7 @@ class 'control' {
 }
 
 return control
-./PortOS/lib/controls/explorer.lua"6173"Fcontrol = require(".PortOS.lib.controls.control")
+./PortOS/lib/controls/explorer.lua"7449"Flocal control = require(".PortOS.lib.controls.control")
 class 'explorer' 'control' {
     NoFilesMessage = "There aren't any files here",
     selectedColor = colors.lightBlue,
@@ -532,6 +862,12 @@ class 'explorer' 'control' {
     timetravel = false,
 
     sortDirectory = function(parent, fileList)
+        if type(parent) ~= "string" then
+            error("Parameter 1 'parent' expected type string, got "..typeof(parent), 2)
+        elseif typeof(fileList) ~= "table" then
+            error("Parameter 2 'fileList' expected type table, got "..typeof(fileList), 2)
+        end
+
         local folders = {}
         local files = {}
         for _, file in pairs(fileList) do
@@ -569,6 +905,7 @@ class 'explorer' 'control' {
         term.setTextColor(self.textColor)
 
         if fs.exists(self.fileLocation) and fs.isDir(self.fileLocation) then
+---@diagnostic disable-next-line: undefined-global
             local files = explorer.sortDirectory(self.fileLocation, fs.list(self.fileLocation))
 
             local upper = math.min(self.scroll + self.bounds.Height - 3, #files)
@@ -604,7 +941,14 @@ class 'explorer' 'control' {
         end
     end,
     navigate = function(self, location)
+        if type(location) ~= "string" then
+            error("Parameter 2 'location' expected type string, got "..typeof(location), 2)
+        end
+
         if location and fs.exists(location) then
+            if location == self.fileLocation then
+                return false, "The explorer is already at this location"
+            end
             if fs.isDir(location) then
                 if self.timetravel then
                     self.timetravel = false
@@ -620,8 +964,10 @@ class 'explorer' 'control' {
                 self.selectFile:invoke(self, location)
             end
             self.updateGraphics = true
+
+            return true
         else
-            error("File location could not be found", 2)
+            return false, "The location could not be found"
         end
     end,
     navigateBack = function(self)
@@ -630,7 +976,7 @@ class 'explorer' 'control' {
             local togo = self.history[#self.history]
             self.history[#self.history] = nil
             table.insert(self.future, self.fileLocation)
-            self:navigate(togo)
+            return self:navigate(togo)
         end
     end,
     navigateNext = function(self)
@@ -639,7 +985,7 @@ class 'explorer' 'control' {
             local togo = self.future[#self.future]
             self.future[#self.future] = nil
             table.insert(self.history, self.fileLocation)
-            self:navigate(togo)
+            return self:navigate(togo)
         end
     end,
     click = function(self, _, data)
@@ -660,22 +1006,36 @@ class 'explorer' 'control' {
             end
         end
     end,
-    openFile = function(path)
+    openFile = function(self, path)
         if path and fs.exists(path) then
-            shell.run(registry.getFileHandler(path:sub(-4)), path)
+            local fileHandler = registry.getFileHandler(path:sub(-4))
+            if fileHandler then
+                print(self[".parentScreen"])
+                threading:startThread(function()
+                    shell.run(fileHandler, path)
+                    if self then
+                        self[".parentScreen"]:resume()
+                        self[".parentScreen"]:invalidate(true)
+                    end
+                end)
+                if self then
+                    self[".parentScreen"]:pause()
+                end
+                return true
+            else
+                return false, "File type has no handler"
+            end
         else
-            error("Path could not be found", 2)
+            return false, "Path could not be found"
         end
     end,
     new = function(this, default)
-
         this {
             fileLocation = default or "/PortOS",
             changeDirectory = events:createEvent(),
             selectFile = events:createEvent(),
             history = {},
-            future = {},
-            openFile = explorer.openFile
+            future = {}
         }
         this.bounds {
             Top = 1,
@@ -688,8 +1048,9 @@ class 'explorer' 'control' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return explorer
-./PortOS/lib/controls/label.lua"691"Flocal control = require(".PortOS.lib.controls.control")
+./PortOS/lib/controls/label.lua"742"Flocal control = require(".PortOS.lib.controls.control")
 
 class 'label' 'control' {
     Text = "Label",
@@ -713,8 +1074,9 @@ class 'label' 'control' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return label
-./PortOS/lib/controls/rectangle.lua"492"Flocal control = require(".PortOS.lib.controls.control")
+./PortOS/lib/controls/rectangle.lua"520"Flocal control = require(".PortOS.lib.controls.control")
 
 class 'rectangle' 'control' {
     Background = colors.lightGray,
@@ -727,13 +1089,12 @@ class 'rectangle' 'control' {
             Width = 8,
             Height = 3
         }
-
-        return output
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return rectangle
-./PortOS/lib/controls/textbox.lua"8480"Fcontrol = require(".PortOS.lib.controls.control")
+./PortOS/lib/controls/textbox.lua"8593"Flocal control = require(".PortOS.lib.controls.control")
 
 class 'textbox' 'control' {
     Text = "",
@@ -956,11 +1317,13 @@ class 'textbox' 'control' {
             Width = 10,
             Height = 3
         }
+        events:addHandler(this.Click, this.click, this)
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return textbox
-./PortOS/lib/data"5"D./PortOS/lib/data/number.lua"0"F./PortOS/lib/data/rect.lua"1383"Fclass 'rect' {
+./PortOS/lib/data"5"D./PortOS/lib/data/number.lua"0"F./PortOS/lib/data/rect.lua"1434"Fclass 'rect' {
     Left = 0,
     Top = 0,
     Width = 0,
@@ -1003,6 +1366,7 @@ return textbox
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return rect
 ./PortOS/lib/data/string.lua"2685"Flocal stringbuilder = require(".PortOS.lib.data.stringbuilder")
 
@@ -1103,7 +1467,7 @@ string.pad = function(str, width, padding)
         return (string.rep(padding, padsLeft)) .. str .. (string.rep(padding, padsRight))
     end
 end
-./PortOS/lib/data/stringbuilder.lua"3690"Fclass 'stringbuilder' {
+./PortOS/lib/data/stringbuilder.lua"3741"Fclass 'stringbuilder' {
     ---Stores the string entries of a stringbuilder
     [".entries"] = {},
     --- Appends a string to the stringbuilder
@@ -1228,6 +1592,7 @@ end
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return stringbuilder
 ./PortOS/lib/data/table.lua"2749"Flocal function find(tbl, value)
     if type(tbl) ~= "table" then
@@ -1342,7 +1707,7 @@ local function shallowCopy(tbl)
     return t
 end
 table["shallowCopy"] = shallowCopy
-./PortOS/lib/glamour.lua"1400"Flocal stringbuilder = require(".PortOS.lib.data.stringbuilder")
+./PortOS/lib/glamour.lua"1502"Flocal stringbuilder = require(".PortOS.lib.data.stringbuilder")
 
 class 'glamour' {
     formatTable = function(tbl, depth, tabchar, tab, history)
@@ -1361,6 +1726,7 @@ class 'glamour' {
             local sb = new 'stringbuilder'("{\n")
             for key, value in pairs(tbl) do
                 local line = string.rep(tabchar, tab)
+---@diagnostic disable-next-line: undefined-global
                 line = line .. tostring(key) .. ": " .. glamour.formatTable(value, depth - 1, tabchar, tab + 2)
                 sb:appendLine(line)
             end
@@ -1380,16 +1746,17 @@ class 'glamour' {
     end
 }
 
+---@diagnostic disable-next-line: undefined-global
 return glamour
 ./PortOS/lib/lang"2"D./PortOS/lib/lang/color"2"D./PortOS/lib/lang/color/color.lua"0"F./PortOS/lib/lang/color/colorpalette.lua"27"Fclass 'colorPalette' {
 	
 }
-./PortOS/lib/lang/keywords.lua"6291"F-- if classA:extends(classB) then..
+./PortOS/lib/lang/keywords.lua"6705"F-- if classA:extends(classB) then..
 --- Returns boolean indicating if the class contains the defined base class
 ---@param self table
 ---@param classB table
 local extends = function(self, classB)
-    if not type(classB) or not classB[".className"] then
+    if type(classB) ~= "table" or  not classB[".className"] then
         error("Second argument expected a class, got " .. type(classB), 2)
     end
     if table.find(self[".classBases"], classB[".className"]) then
@@ -1489,13 +1856,13 @@ local buildClass = function(name, classDefinition, env)
     return classDefinition
 end
 
-classDef = function(name, classDefinition, inheritance, env)
+ClassDef = function(name, classDefinition, inheritance, env)
     inheritance = inheritance or {}
 
     if type(classDefinition) == "string" then
         return function(cl)
             table.insert(inheritance, classDefinition)
-            return classDef(name, cl, inheritance, env)
+            return ClassDef(name, cl, inheritance, env)
         end
     elseif type(classDefinition) == "table" then
         if not classDefinition[".classBases"] then
@@ -1514,25 +1881,29 @@ end
 -- class 'myClass' 'yourClass'.. { ... }
 ---Defines a class with a c#-like syntax
 ---@param name string
+---@diagnostic disable-next-line: duplicate-set-field
 _G["class"] = function(name, env)
+    --TODO: getfenv is deprecated. Need to figure out how to implement this in a non-deprecated way
     local env = type(env) == "table" and env or getfenv(2)
     if env[name] then
         error(string.format("Class with name %q already exists", name), 2)
     end
 
     return function(cl)
-        return classDef(name, cl, {}, env)
+        return ClassDef(name, cl, {}, env)
     end
 end
 
 --- Generates a new instance of the class
 ---@param cl string|table
 ---@param env? table
+---@diagnostic disable-next-line: duplicate-set-field
 _G["new"] = function(cl, env)
     if type(cl) == "string" then
+        --TODO: getfenv is deprecated. Must figure out how to implement this in 5.2
         env = env or getfenv(2)
         if type(env[cl]) == "table" and type(env[cl][".ctor"]) == "function" then
-            def = env[cl]
+            local def = env[cl]
             if type(env[cl].new) ~= "function" then
                 error("Cannot instance a static class (no \"new\" function)", 2)
             end
@@ -1555,6 +1926,7 @@ _G["new"] = function(cl, env)
 end
 
 --- Gets the type of the object
+---@diagnostic disable-next-line: duplicate-set-field
 _G["typeof"] = function(a)
     if a and type(a) == "table" and type(a[".className"]) == "string" then
         if a[".instance"] then
@@ -1567,6 +1939,7 @@ _G["typeof"] = function(a)
 end
 
 --- Marks a table to not be recreated when instancing a new object
+---@diagnostic disable-next-line: duplicate-set-field
 _G["static"] = function(tbl)
     if type(tbl) == "table" then
         tbl[".PORTOS-STATIC_TBL"] = true
@@ -1667,7 +2040,7 @@ end
 Log["Save"] = Save
 
 return Log
-./PortOS/lib/peripherals"2"D./PortOS/lib/peripherals/audio.lua"2720"Flocal dfpwm = require("cc.audio.dfpwm")
+./PortOS/lib/peripherals"2"D./PortOS/lib/peripherals/audio.lua"2723"Flocal dfpwm = require("cc.audio.dfpwm")
 
 class 'audio' {
     speakers = {},
@@ -1709,7 +2082,7 @@ class 'audio' {
                 local speakerObject = peripheral.wrap(name)
                 local speaker = {
                     device = speakerObject,
-                    play = playAudio,
+                    play = audio.playAudio,
                     id = (os.epoch() + #self.speakers)
                 }
                 table.insert(self.speakers, speaker)
@@ -1719,8 +2092,8 @@ class 'audio' {
             local success, result = pcall(peripheral.getType, name)
             if success and result == "speaker" then
                 local speaker = {
-                    device = speakerObject,
-                    play = playAudio,
+                    device = name,
+                    play = audio.playAudio,
                     id = (os.epoch("utc") + #self.speakers)
                 }
                 table.insert(audio.speakers, speaker)
@@ -1746,7 +2119,7 @@ class 'audio' {
 }
 
 return audio
-./PortOS/lib/peripherals/network.lua"6268"Flocal network = {
+./PortOS/lib/peripherals/network.lua"6218"Flocal network = {
     adapter = nil,
     maxChannels = 128,
     openChannels = 0,
@@ -1831,11 +2204,11 @@ end
 network["receive"] = receive
 
 local function receiveAsync(self, callback, ...)
-    local callbackWrapper = function(...)
-        events:removeHandler("modem_message", callbackWrapper)
+    CallbackWrapper = function(...)
+        events:removeHandler("modem_message", CallbackWrapper)
         callback(...)
     end
-    events:addHandler("modem_message", callbackWrapper, ...)
+    events:addHandler("modem_message", CallbackWrapper, ...)
 end
 network["receiveAsync"] = receiveAsync
 
@@ -1878,17 +2251,17 @@ local function receiveChannelAsync(self, channel, callback, ...)
             error("Too many channels open (Max "..(self.maxChannels)..")", 2)
         else
             self:openChannel(channel)
-            local callbackWrapper = function(...)
+            CallbackWrapper = function(...)
                 local args = {...}
                 if args[3] == channel then
-                    events:removeHandler("modem_message", callbackWrapper)
+                    events:removeHandler("modem_message", CallbackWrapper)
                     if disable then
                         self:closeChannel(channel)
                     end
                     callback(...)
                 end
             end
-            events:addHandler("modem_message", callbackWrapper, ...)
+            events:addHandler("modem_message", CallbackWrapper, ...)
         end
     end
 end
@@ -1915,38 +2288,57 @@ network["buildPacket"] = buildPacket
 
 local function getFreeChannel(self)
     local packet = self.buildPacket(os.getComputerID(), "router", 0, "")
-    self.adapter.transmit(0, 0, protocol)
+    
     --TODO
 end
 network["getFreeChannel"] = getFreeChannel
 
 local function sendHandshake(self, channel, protocol, message)
-    self.adapter.transmit(channel, channel, 
+    self.adapter.transmit(channel, channel)
     --TODO
 end
-./PortOS/lib/threading.lua"2930"Flocal threading = {
+./PortOS/lib/threading.lua"3494"Flocal threading = {
     processThreads = false,
     threads = {}
 }
 
 local function startThread(self, delegate, ...)
-    thread = {}
+    local thread = {}
     thread["coroutine"] = coroutine.create(function()
-        delegate(unpack(arg))
+        delegate(table.unpack(arg))
     end)
     thread["id"] = os.epoch()
 
     table.insert(self.threads, thread)
-    return id
+    return thread["id"]
 end
 threading["startThread"] = startThread
+
+local function pauseThread(self, id)
+    for idx, thread in pairs(self.threads) do
+        if thread.id == id then
+            coroutine.yield(thread.coroutine)
+            return self.threads.coroutine
+        end
+    end
+end
+threading["pauseThread"] = pauseThread
+local function resumeThread(self, id)
+    for idx, thread in pairs(self.threads) do
+        if thread.id == id then
+            coroutine.resume(thread.coroutine)
+            return self.threads.coroutine
+        end
+    end
+end
+threading["resumeThread"] = resumeThread
 
 local function killThread(self, id)
     for idx, thread in pairs(self.threads) do
         if thread.id == id then
             coroutine.yield(thread.coroutine)
             table.remove(self.threads, idx)
-            return threads.coroutine
+            return self.threads.coroutine
         end
     end
     return nil
@@ -2023,14 +2415,16 @@ local function getThreadStatus(self, index)
 end
 
 return threading
-./PortOS/update.lua"1563"Flocal path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/out.ete"
+./PortOS/root"1"D./PortOS/root/usr"0"D./PortOS/update.lua"1825"F--The installer is currently found at https://pastebin.com/tKT0MVub
+
+local path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/out.ete"
 print("Downloading from github..")
 local request = http.get(path)
 local ete = request.readAll()
 request.close()
 print("Data retrieved")
 
-function readETE(data)
+local function readETE(data)
 	local pathFlag = true
 	local fileLengthFlag = false
 	local fileDataFlag = false
@@ -2059,14 +2453,17 @@ function readETE(data)
 			end
 		elseif fileLengthFlag then
 			if symbol == "\"" then
-				fileLength = tonumber(table.concat(token, ""))
+                fileLength = tonumber(table.concat(token, "")) or -1
+				if fileLength == -1 then
+					error("ete file is corrupted or in a format the updater can't read. Please make sure you have the latest version of this file")
+				end
 				token = {}
 				fileLengthFlag = false
 				fileDataFlag = true
 				typ = 0
 			else
 				table.insert(token, symbol)
-			end 
+			end
 		elseif fileDataFlag then
 			if typ == 0 then
 				if symbol == "F" then
