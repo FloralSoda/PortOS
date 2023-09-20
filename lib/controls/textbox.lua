@@ -221,6 +221,7 @@ class 'textbox' 'control' {
             Width = 10,
             Height = 3
         }
+        events:addHandler(this.Click, this.click, this)
     end
 }
 

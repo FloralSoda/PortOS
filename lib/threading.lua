@@ -11,7 +11,7 @@ local function startThread(self, delegate, ...)
     thread["id"] = os.epoch()
 
     table.insert(self.threads, thread)
-    return id
+    return thread["id"]
 end
 threading["startThread"] = startThread
 

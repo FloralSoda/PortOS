@@ -6,7 +6,6 @@ class 'app' {
     _oldBounds = {},
     Background = colors.black,
     focusedControl = nil,
-    mouseclick = events:createEvent(),
 
     -- Rendering
     getControlsInRect = function(controls, rect)
@@ -241,8 +240,28 @@ class 'app' {
         table.insert(self.controls, 1, control)
     end,
 
+    -- Control
     new = function(this)
+        this {
+            mouseclick = events:createEvent()
+        }
+    end,
+    run = function(self)
+        if self.threadId then
+            error("Application was already running! Create a copy if you want two", 2)
+        end
 
+        self:handleMouse()
+        self:invalidate()
+
+        self["threadId"] = threading:startTimer(0, self.draw, self)
+    end,
+    stop = function(self)
+        if self.threadId then
+            screen:unhandleMouse()
+            threading:killThread(self["threadId"])
+            screen:clear()
+        end
     end
 }
 return app
