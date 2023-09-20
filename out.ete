@@ -52,7 +52,7 @@ if url then
 else
     error("Usage: download <URL>")
 end
-./PortOS/bin/events.lua"2903"Flocal events = {
+./PortOS/bin/events.lua"3025"Flocal events = {
     handleEvents = false,
     threads = {}
 }
@@ -63,6 +63,8 @@ local function addHandler(self, event, delegate, ...)
     end
     if type(event) == "table" then
         event = event.id
+    elseif type(event) ~= "string" then
+        error("Event expected to be a table or a string. Found "..type(event), 2)
     end
     if type(self[event]) ~= "table" then
         self[event] = {}
@@ -2021,12 +2023,9 @@ local function getThreadStatus(self, index)
 end
 
 return threading
-./PortOS/update.lua"1622"F-- local path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/out.ete"
--- print("Downloading from github..")
--- local ete = http.get(path)
-local file = fs.open("./PortOS/out.ete", "r")
-local ete = file.readAll()
-file.close()
+./PortOS/update.lua"1513"Flocal path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/out.ete"
+print("Downloading from github..")
+local ete = http.get(path)
 print("Data retrieved")
 
 function readETE(data)
@@ -2049,7 +2048,7 @@ function readETE(data)
 		if pathFlag then
 			if symbol == "\"" then
 				print(table.concat(token))
-				path = "./testDir/"..table.concat(token, "")
+				path = table.concat(token, "")
 				token = {}
 				pathFlag = false
 				fileLengthFlag = true
