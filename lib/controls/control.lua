@@ -3,11 +3,9 @@ class 'control' {
     bounds = new 'rect'(1, 1, 1, 1),
     Enabled = true,
     updateGraphics = true,
-    Click = events:createEvent(),
 
     clickHandler = function(self, _, control, data)
         if control and control[".screenuuid"] == self[".screenuuid"] then
-            print(typeof(control))
             self.Click:invoke(data)
         end
     end,
@@ -19,6 +17,9 @@ class 'control' {
         events:addHandler(self[".parentScreen"].mouseclick, self.clickHandler, self)
     end,
     new = function(this)
+        this {
+            Click = events:createEvent()
+        }
     end
 }
 

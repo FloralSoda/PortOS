@@ -119,7 +119,6 @@ class 'app' {
                             focusedControl:unfocus(control)
                         end
                     end
-                    print(typeof(control))
                     local data = {
                         scroll = event == "mouse_scroll",
                         button = button,
