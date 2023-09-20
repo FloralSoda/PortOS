@@ -1,6 +1,8 @@
 local path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/out.ete"
 print("Downloading from github..")
-local ete = http.get(path)
+local request = http.get(path)
+local ete = request.readAll()
+request.close()
 print("Data retrieved")
 
 function readETE(data)

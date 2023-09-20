@@ -2023,9 +2023,11 @@ local function getThreadStatus(self, index)
 end
 
 return threading
-./PortOS/update.lua"1513"Flocal path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/out.ete"
+./PortOS/update.lua"1563"Flocal path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/out.ete"
 print("Downloading from github..")
-local ete = http.get(path)
+local request = http.get(path)
+local ete = request.readAll()
+request.close()
 print("Data retrieved")
 
 function readETE(data)
