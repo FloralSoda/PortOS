@@ -213,7 +213,7 @@ require(".PortOS.lib.data.table")
 -- require(".PortOS.lib.data.string")
 _G["threading"] = require(".PortOS.lib.threading")
 _G["events"] = require(".PortOS.bin.events")
-./PortOS/bin/ux"0"D./PortOS/lib"7"D./PortOS/lib/controls"7"D./PortOS/lib/controls/application.lua"8923"FControl = require(".PortOS.lib.controls.control")
+./PortOS/bin/ux"0"D./PortOS/lib"7"D./PortOS/lib/controls"7"D./PortOS/lib/controls/application.lua"8880"FControl = require(".PortOS.lib.controls.control")
 
 -- Properties and Class Definition
 class 'app' {
@@ -334,7 +334,6 @@ class 'app' {
                             focusedControl:unfocus(control)
                         end
                     end
-                    print(typeof(control))
                     local data = {
                         scroll = event == "mouse_scroll",
                         button = button,
@@ -493,16 +492,14 @@ class 'button' 'control' {
 }
 
 return button
-./PortOS/lib/controls/control.lua"738"Flocal rect = require ".PortOS.lib.data.rect"
+./PortOS/lib/controls/control.lua"735"Flocal rect = require ".PortOS.lib.data.rect"
 class 'control' {
     bounds = new 'rect'(1, 1, 1, 1),
     Enabled = true,
     updateGraphics = true,
-    Click = events:createEvent(),
 
     clickHandler = function(self, _, control, data)
         if control and control[".screenuuid"] == self[".screenuuid"] then
-            print(typeof(control))
             self.Click:invoke(data)
         end
     end,
@@ -514,6 +511,9 @@ class 'control' {
         events:addHandler(self[".parentScreen"].mouseclick, self.clickHandler, self)
     end,
     new = function(this)
+        this {
+            Click = events:createEvent()
+        }
     end
 }
 
