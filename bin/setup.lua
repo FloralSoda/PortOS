@@ -1,0 +1,7 @@
+require(".PortOS.lib.lang.keywords")
+_G["registry"] = require(".PortOS.bin.registry")
+registry.load()
+require(".PortOS.lib.data.table")
+-- require(".PortOS.lib.data.string")
+_G["threading"] = require(".PortOS.lib.threading")
+_G["events"] = require(".PortOS.bin.events")
