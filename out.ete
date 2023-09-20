@@ -1,0 +1,2096 @@
+./PortOS"3"D./PortOS/bin"8"D./PortOS/bin/apps"1"D./PortOS/bin/apps/notepad"1"D./PortOS/bin/apps/notepad/main.lua"0"F./PortOS/bin/boot.lua"570"Fterm.clear()
+term.setCursorPos(1, 1)
+print("Loading libraries..")
+shell.run("PortOS/bin/setup.lua")
+
+print("Checking for updates")
+
+print("Starting OS..")
+threading:killAllThreads()
+
+function runShell()
+    term.clear()
+    term.setCursorPos(1, 1)
+    shell.run("shell")
+    events:stopEvents()
+    threading:stopThreadProcessor()
+    threading:killAllThreads()
+end
+
+threading:startThread(events.acceptEvents, events)
+threading:startThread(shell.run, "test")
+-- threading:startThread(runShell)
+
+threading:startThreadProcessor()
+
+print("Goodbye!")
+sleep(1)
+os.shutdown()
+./PortOS/bin/data"1"D./PortOS/bin/data/default.reg"52"F{
+  fileHandlers = {
+    [ ".lua" ] = "edit",
+  },
+}./PortOS/bin/download.lua"558"Flocal args = {...}
+
+fs.makeDir("PortOS/Users/Global")
+fs.makeDir("PortOS/Users/Global/Downloads")
+
+local url = args[1]
+if url then
+    if http.checkURL(url) then
+        local request = http.get(url)
+        local data = request.readAll()
+        request.close()
+        local slash = url:reverse():find("%/")
+        local name = url:sub(1-slash)
+        local file = fs.open("PortOS/Users/Global/Downloads/"..name, "w")
+        file.write(data)
+        file.close()
+    else
+        error("Invalid URL")
+    end
+else
+    error("Usage: download <URL>")
+end
+./PortOS/bin/events.lua"2903"Flocal events = {
+    handleEvents = false,
+    threads = {}
+}
+
+local function addHandler(self, event, delegate, ...)
+    if type(delegate) ~= "function" then
+        error("Delegate expects function, received " .. type(delegate), 2)
+    end
+    if type(event) == "table" then
+        event = event.id
+    end
+    if type(self[event]) ~= "table" then
+        self[event] = {}
+    end
+    local delegateData = {
+        delegate = delegate,
+        args = {...}
+    }
+    table.insert(self[event], delegateData)
+end
+events["addHandler"] = addHandler
+
+local function removeHandler(self, event, delegate)
+    if type(event) == "table" then
+        event = event.id
+    end
+    if type(self[event]) ~= "table" then
+        return false
+    else
+        for idx, del in pairs(self[event]) do
+            if del.delegate == delegate then
+                table.remove(self[event], idx)
+                return true
+            end
+        end
+
+        return false
+    end
+end
+events["removeHandler"] = removeHandler
+
+local function raiseEvent(self, ...)
+    os.queueEvent(self.id, ...)
+end
+
+local function createEvent(self)
+    local base = os.epoch("utc")
+    while self[tostring(base)] do
+        base = base + math.random(1000)
+    end
+
+    local newEvent = {
+        invoke = raiseEvent,
+        id = tostring(base)
+    }
+    self[tostring(base)] = {}
+    return newEvent
+end
+events["createEvent"] = createEvent
+
+local function deleteEvent(self, event)
+    if type(event) ~= "table" then
+        error("Event was not a custom event", 2)
+    elseif event.id == nil then
+        error("Event was not a custom event", 2)
+    elseif self[event.id] == nil then
+        error("Event was already removed", 2)
+    else
+        self[event.id] = nil
+    end
+end
+events["deleteEvent"] = deleteEvent
+
+local function processEvent(self, event, eventData)
+    if type(self[event]) == "table" then
+        for _, del in pairs(self[event]) do
+            local success, errorMsg = pcall(function()
+                if #del.args > 0 then
+                    del.delegate(table.unpack(del.args), table.unpack(eventData))
+                else
+                    del.delegate(table.unpack(eventData))
+                end
+            end)
+            if not success then
+                error(errorMsg, 0)
+            end
+        end
+    end
+end
+local function acceptEvents(self)
+    handleEvents = true
+    while handleEvents do
+        local eventData = {os.pullEvent()}
+        local event = eventData[1]
+
+        if event == ".portOS_cancelEvent" then
+            handleEvents = false
+            break
+        else
+            if self[event] then
+                threading:startThread(processEvent, self, event, eventData)
+            end
+        end
+    end
+end
+events["acceptEvents"] = acceptEvents
+
+local function stopEvents()
+    os.queueEvent(".portOS_cancelEvent")
+end
+events["stopEvents"] = stopEvents
+
+return events
+./PortOS/bin/registry.lua"828"Flocal registry = {
+	data = {
+		fileHandlers = {}
+	},
+	defaultLocation = "/PortOS/bin/data/default.reg"
+}
+
+function registry.addFileHandler(type, programPath, force)
+	if registry.data.fileHandlers[type] == nil or force then
+		registry.data.fileHandlers[type] = programPath
+		return true
+	else
+		return false
+	end
+end
+
+function registry.getFileHandler(type)
+	if registry.data.fileHandlers then
+		return registry.data.fileHandlers[type]
+	else
+		return nil
+	end
+end
+
+function registry.save()
+	local file = fs.open(registry.defaultLocation, "w")
+	file.write(textutils.serialise(registry.data))
+	file.close()
+end
+
+function registry.load()
+	if fs.exists(registry.defaultLocation) then
+		local file = fs.open(registry.defaultLocation, "r")
+		registry.data = textutils.unserialise(file.readAll())
+		file.close()
+	end
+end
+
+return registry./PortOS/bin/setup.lua"270"Frequire(".PortOS.lib.lang.keywords")
+_G["registry"] = require(".PortOS.bin.registry")
+registry.load()
+require(".PortOS.lib.data.table")
+-- require(".PortOS.lib.data.string")
+_G["threading"] = require(".PortOS.lib.threading")
+_G["events"] = require(".PortOS.bin.events")
+./PortOS/bin/ux"0"D./PortOS/lib"7"D./PortOS/lib/controls"7"D./PortOS/lib/controls/application.lua"8923"FControl = require(".PortOS.lib.controls.control")
+
+-- Properties and Class Definition
+class 'app' {
+    controls = {},
+    _oldBounds = {},
+    Background = colors.black,
+    focusedControl = nil,
+    mouseclick = events:createEvent(),
+
+    -- Rendering
+    getControlsInRect = function(controls, rect)
+        local roundRect = rect:truncate()
+        local output = {}
+
+        for _, c in pairs(controls) do
+            local roundBounds = c.bounds:truncate()
+            if roundBounds:intersectsWith(roundRect) then
+                table.insert(output, c)
+            end
+        end
+
+        return output
+    end,
+    getControlsToConsider = function(controls, idx)
+        local toConsider = {
+            behind = table.sub(controls, 1, idx - 1),
+            before = {}
+        }
+        local toCheck = table.sub(controls, idx - 1)
+
+        for _, c in pairs(toCheck) do
+            if not c.updateGraphics then
+                table.insert(toConsider.before, c)
+            end
+        end
+
+        return toConsider
+    end,
+    renderControl = function(self, control, idx, force)
+        if control.Enabled and (control.updateGraphics or force) then
+            control.updateGraphics = false
+            if control.draw then
+                local predrawn = false
+                if self["_oldBounds"][control[".screenuuid"]] then
+                    local oldBounds = self["_oldBounds"][control[".screenuuid"]]
+                    local dx = oldBounds.Left ~= control.bounds.Left
+                    local dy = oldBounds.Top ~= control.bounds.Top
+                    local dw = oldBounds.Width ~= control.bounds.Width
+                    local dh = oldBounds.Height ~= control.bounds.Height
+
+                    if dx or dy or dw or dh then
+                        local toConsider = self.getControlsToConsider(self.controls, idx)
+                        local toRedrawBehind = self.getControlsInRect(toConsider.behind, oldBounds)
+                        local toRedrawBefore = self.getControlsInRect(toConsider.before, oldBounds)
+                        paintutils.drawFilledBox(oldBounds.Left, oldBounds.Top, oldBounds.Left + oldBounds.Width - 1,
+                            oldBounds.Top + oldBounds.Height - 1, self.Background)
+
+                        for _, control in pairs(toRedrawBehind) do
+                            control:draw()
+                        end
+                        control:draw()
+                        predrawn = true
+                        for _, control in pairs(toRedrawBefore) do
+                            control:draw()
+                        end
+                    end
+                end
+
+                self["_oldBounds"][control[".screenuuid"]] = {
+                    Left = control.bounds.Left,
+                    Top = control.bounds.Top,
+                    Width = control.bounds.Width,
+                    Height = control.bounds.Height
+                }
+
+                if not predrawn then
+                    local toRedraw = self.getControlsInRect(self.getControlsToConsider(self.controls, idx).before,
+                        control.bounds)
+
+                    control:draw()
+                    for _, c in pairs(toRedraw) do
+                        c:draw()
+                    end
+                end
+            end
+        end
+    end,
+    draw = function(self, force)
+        local cursorBlink = term.getCursorBlink()
+        term.setCursorBlink(false)
+
+        for idx, control in pairs(self.controls) do
+            self.renderControl(self, control, idx, force)
+        end
+
+        term.setCursorBlink(cursorBlink)
+    end,
+    invalidate = function(self, force)
+        term.setBackgroundColor(self.Background)
+        term.clear()
+
+        self:draw(force)
+    end,
+
+    -- Click Handling
+    _mouseClickHandler = function(self, event, button, x, y)
+        local hitControl = false
+        for _, control in pairs(table.reverse(self.controls)) do
+            if control.Enabled and control.bounds.Left and control.bounds.Width and 
+                control.bounds.Top and control.bounds.Height then
+
+                local inXBounds = control.bounds.Left <= x and control.bounds.Left + control.bounds.Width - 1 >= x
+                local inYBounds = control.bounds.Top <= y and control.bounds.Top + control.bounds.Height - 1 >= y
+
+                if inXBounds and inYBounds then
+                    if focusedControl then
+                        if focusedControl.unfocus then
+                            focusedControl:unfocus(control)
+                        end
+                    end
+                    print(typeof(control))
+                    local data = {
+                        scroll = event == "mouse_scroll",
+                        button = button,
+                        X = 1 + x - control.bounds.Left,
+                        Y = 1 + y - control.bounds.Top
+                    }
+
+                    self.mouseclick:invoke(control, data)
+                    focusedControl = control
+                    hitControl = true
+                    break
+                end
+            end
+        end
+        if not hitControl then
+            if focusedControl then
+                if focusedControl.unfocus then
+                    focusedControl:unfocus(control)
+                end
+            end
+            focusedControl = nil
+
+            local data = {
+                scroll = event == "mouse_scroll",
+                button = button,
+                X = x,
+                Y = y
+            }
+            self.mouseclick:invoke(nil, data)
+        end
+    end,
+    handleMouse = function(self)
+        events:addHandler("mouse_click", self._mouseClickHandler, self)
+        events:addHandler("mouse_scroll", self._mouseClickHandler, self)
+    end,
+    unhandleMouse = function(self)
+        events:removeHandler("mouse_click", self._mouseClickHandler, self)
+        events:removeHandler("mouse_scroll", self._mouseClickHandler, self)
+    end,
+
+    -- Elements
+    addControl = function(self, control)
+        if control.extends == nil or not control:extends(Control) then
+            error("Expected type extending Control, got "..typeof(control), 2)
+        end
+        control[".screenuuid"] = os.epoch("utc") - #self.controls
+        table.insert(self.controls, control)
+        control:bind(self)
+    end,
+    removeControl = function(self, control)
+        if control.extends == nil or not control:extends(Control) then
+            error("Expected type extending Control, got "..typeof(control), 2)
+        end
+        local loc = -1
+        for idx, con in pairs(self.controls) do
+            if con[".screenuuid"] == control[".screenuuid"] then
+                loc = idx
+                break
+            end
+        end
+        if loc == -1 then
+            return false
+        else
+            if self.controls[loc].destroy then
+                if type(self.controls[loc].destroy) == "table" then
+                    for _, func in pairs(self.controls[loc].destroy) do
+                        func(self.controls[loc])
+                    end
+                else
+                    self.controls[loc]:destroy()
+                end
+            end
+            table.remove(self.controls, loc)
+            return true
+        end
+    end,
+    containsControl = function(self, control)
+        if control.extends == nil or not control:extends(Control) then
+            error("Expected type extending Control, got "..typeof(control), 2)
+        end
+        if control[".screenuuid"] then
+            for _, con in pairs(self.controls) do
+                if con[".screenuuid"] == control[".screenuuid"] then
+                    return true
+                end
+            end
+        end
+
+        return false
+    end,
+    clear = function(self)
+        for _, control in pairs(self.controls) do
+            self:removeControl(control)
+        end
+        self._oldBounds = {}
+        self.focusedControl = nil
+    end,
+    bringToFront = function(self, control)
+        if control.extends == nil or not control:extends(Control) then
+            error("Expected type extending Control, got "..typeof(control), 2)
+        end
+        for idx, c in pairs(self.controls) do
+            if c[".screenuuid"] == control[".screenuuid"] then
+                table.remove(self.controls, idx)
+                break
+            end
+        end
+        table.insert(self.controls, control)
+    end,
+    pushToBack = function(self, control)
+        if control.extends == nil or not control:extends(Control) then
+            error("Expected type extending Control, got "..typeof(control), 2)
+        end
+        for idx, c in pairs(self.controls) do
+            if c[".screenuuid"] == control[".screenuuid"] then
+                table.remove(self.controls, idx)
+                break
+            end
+        end
+        table.insert(self.controls, 1, control)
+    end,
+
+    new = function(this)
+
+    end
+}
+return app
+./PortOS/lib/controls/button.lua"1004"Fcontrol = require(".PortOS.lib.controls.control")
+
+class 'button' 'control' {
+    Text = "Button",
+    Background = colors.lightGray,
+    Foreground = colors.black,
+    PressedColor = colors.gray,
+
+    draw = function(self)
+        paintutils.drawFilledBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+            self.bounds.Top + self.bounds.Height - 1, self.Background)
+        term.setTextColor(self.Foreground)
+        local toWrite = self.Text
+        if #self.Text > self.bounds.Width then
+            local difference = #self.Text - self.bounds.Width
+            toWrite = self.Text:sub(difference / 2, -(difference / 2))
+        end
+        term.setCursorPos(math.ceil(self.bounds.Left + ((self.bounds.Width - #self.Text) / 2)),
+            math.ceil((self.bounds.Top - 1) + (self.bounds.Height / 2)))
+        write(toWrite)
+    end,
+
+    new = function(this)
+        this.bounds {
+            Width = 8,
+            Height = 3
+        }
+    end
+}
+
+return button
+./PortOS/lib/controls/control.lua"738"Flocal rect = require ".PortOS.lib.data.rect"
+class 'control' {
+    bounds = new 'rect'(1, 1, 1, 1),
+    Enabled = true,
+    updateGraphics = true,
+    Click = events:createEvent(),
+
+    clickHandler = function(self, _, control, data)
+        if control and control[".screenuuid"] == self[".screenuuid"] then
+            print(typeof(control))
+            self.Click:invoke(data)
+        end
+    end,
+    destroy = function(self)
+        events:removeHandler(self[".parentScreen"].mouseclick, self.clickHandler)
+    end,
+    bind = function(self, screen)
+        self[".parentScreen"] = screen
+        events:addHandler(self[".parentScreen"].mouseclick, self.clickHandler, self)
+    end,
+    new = function(this)
+    end
+}
+
+return control
+./PortOS/lib/controls/explorer.lua"6173"Fcontrol = require(".PortOS.lib.controls.control")
+class 'explorer' 'control' {
+    NoFilesMessage = "There aren't any files here",
+    selectedColor = colors.lightBlue,
+    folderColor = colors.yellow,
+    fileColor = colors.blue,
+    background = colors.cyan,
+    textColor = colors.black,
+    border = colors.gray,
+    scroll = 1,
+    selected = -1,
+    timetravel = false,
+
+    sortDirectory = function(parent, fileList)
+        local folders = {}
+        local files = {}
+        for _, file in pairs(fileList) do
+            local name = parent .. "/" .. file
+            if fs.isDir(name) then
+                table.insert(folders, file)
+            else
+                table.insert(files, file)
+            end
+        end
+
+        local output = {}
+        for _, folder in pairs(folders) do
+            table.insert(output, folder)
+        end
+        for _, file in pairs(files) do
+            table.insert(output, file)
+        end
+
+        return output
+    end,
+    draw = function(self)
+        if self.bounds.Width < 10 then
+            self.bounds.Width = 10
+        end
+        if self.bounds.Height < 5 then
+            self.bounds.Height = 5
+        end
+
+        paintutils.drawBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+            self.bounds.Top + self.bounds.Height - 1, self.border)
+        paintutils.drawFilledBox(self.bounds.Left + 1, self.bounds.Top + 1, self.bounds.Left + self.bounds.Width - 2,
+            self.bounds.Top + self.bounds.Height - 2, self.background)
+
+        term.setTextColor(self.textColor)
+
+        if fs.exists(self.fileLocation) and fs.isDir(self.fileLocation) then
+            local files = explorer.sortDirectory(self.fileLocation, fs.list(self.fileLocation))
+
+            local upper = math.min(self.scroll + self.bounds.Height - 3, #files)
+            for idx = self.scroll, upper do
+                local file = files[idx]
+                local fileLoc = self.fileLocation .. "/" .. file
+
+                paintutils.drawLine(self.bounds.Left + 1, self.bounds.Top + idx - (self.scroll - 1),
+                    self.bounds.Left + self.bounds.Width - 2, self.bounds.Top + idx - (self.scroll - 1),
+                    self.selected == idx and self.selectedColor or self.background)
+
+                term.setCursorPos(self.bounds.Left + 1, self.bounds.Top + idx - (self.scroll - 1))
+                local icon = fs.isDir(fileLoc) and "#" or "O"
+                local iconColor = fs.isDir(fileLoc) and self.folderColor or self.fileColor
+
+                write("-")
+                term.setTextColor(iconColor)
+                write(icon .. " ")
+                term.setTextColor(self.textColor)
+                if #file > self.bounds.Width - 6 then
+                    write(file:sub(1, self.bounds.Width - 7) .. "..")
+                else
+                    write(file)
+                end
+            end
+        else
+            local noFiles = self.NoFilesMessage
+            local lines = string.wrap(noFiles, self.bounds.Width - 2)
+            for idx, line in pairs(lines) do
+                term.setCursorPos(self.bounds.Left + 1, self.bounds.Top + idx)
+                write(string.pad(line, self.bounds.Width - 2))
+            end
+        end
+    end,
+    navigate = function(self, location)
+        if location and fs.exists(location) then
+            if fs.isDir(location) then
+                if self.timetravel then
+                    self.timetravel = false
+                else
+                    table.insert(self.history, self.fileLocation)
+                    self.future = {}
+                end
+
+                self.changeDirectory:invoke(self, location, self.fileLocation)
+                self.fileLocation = location
+                self.selected = -1
+            else
+                self.selectFile:invoke(self, location)
+            end
+            self.updateGraphics = true
+        else
+            error("File location could not be found", 2)
+        end
+    end,
+    navigateBack = function(self)
+        if #self.history > 0 then
+            self.timetravel = true
+            local togo = self.history[#self.history]
+            self.history[#self.history] = nil
+            table.insert(self.future, self.fileLocation)
+            self:navigate(togo)
+        end
+    end,
+    navigateNext = function(self)
+        if #self.future > 0 then
+            self.timetravel = true
+            local togo = self.future[#self.future]
+            self.future[#self.future] = nil
+            table.insert(self.history, self.fileLocation)
+            self:navigate(togo)
+        end
+    end,
+    click = function(self, _, data)
+        local files = self.sortDirectory(self.fileLocation, fs.list(self.fileLocation))
+        self.updateGraphics = true
+        if data.scroll then
+            if self.scroll + data.button > 0 and self.scroll + data.button < (#files - (self.bounds.Height - 4)) then
+                self.scroll = self.scroll + data.button
+            end
+        elseif data.button == 1 then
+            if data.Y == 1 or (2 + #files - self.scroll < data.Y) then
+                self.selected = -1
+                return
+            elseif self.selected == self.scroll + data.Y - 2 then
+                self:navigate(self.fileLocation .. (self.fileLocation[-1] == "/" and "" or "/") .. files[self.selected])
+            else
+                self.selected = self.scroll + data.Y - 2
+            end
+        end
+    end,
+    openFile = function(path)
+        if path and fs.exists(path) then
+            shell.run(registry.getFileHandler(path:sub(-4)), path)
+        else
+            error("Path could not be found", 2)
+        end
+    end,
+    new = function(this, default)
+
+        this {
+            fileLocation = default or "/PortOS",
+            changeDirectory = events:createEvent(),
+            selectFile = events:createEvent(),
+            history = {},
+            future = {},
+            openFile = explorer.openFile
+        }
+        this.bounds {
+            Top = 1,
+            Left = 1,
+            Width = 7,
+            Height = 5
+        }
+
+        events:addHandler(this.Click, this.click, this)
+    end
+}
+
+return explorer
+./PortOS/lib/controls/label.lua"691"Flocal control = require(".PortOS.lib.controls.control")
+
+class 'label' 'control' {
+    Text = "Label",
+    Background = colors.white,
+    Foreground = colors.black,
+    draw = function(self)
+        paintutils.drawFilledBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+            self.bounds.Top + self.bounds.Height - 1, self.Background)
+
+        term.setCursorPos(self.bounds.Left, self.bounds.Top)
+        term.setTextColor(self.Foreground)
+        write(self.Text)
+    end,
+    new = function(this, text)
+        this {
+            Text = text or this.Text
+        }
+        this.bounds {
+            Width = #this.Text
+        }
+    end
+}
+
+return label
+./PortOS/lib/controls/rectangle.lua"492"Flocal control = require(".PortOS.lib.controls.control")
+
+class 'rectangle' 'control' {
+    Background = colors.lightGray,
+    draw = function(self)
+        paintutils.drawFilledBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+            self.bounds.Top + self.bounds.Height - 1, self.Background)
+    end,
+    new = function(this)
+        this.bounds {
+            Width = 8,
+            Height = 3
+        }
+
+        return output
+    end
+}
+
+return rectangle
+./PortOS/lib/controls/textbox.lua"8480"Fcontrol = require(".PortOS.lib.controls.control")
+
+class 'textbox' 'control' {
+    Text = "",
+    CaretPosition = 1,
+    PortalPosition = 1,
+    Background = colors.white,
+    CaretColour = colors.lightBlue,
+    Foreground = colors.black,
+    BorderColour = colors.lightGray,
+    CaretBlinkSpeed = 1,
+    ShowBorder = true,
+    ShowCaret = false,
+    MultiLine = false,
+    blinkThreadId = -1,
+
+    draw = function(self)
+        if self.Enabled then
+            local textX = self.ShowBorder and self.bounds.Left + 1 or self.bounds.Left
+            local textY = self.ShowBorder and self.bounds.Top + 1 or self.bounds.Top
+
+            if self.ShowBorder then
+                paintutils.drawBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+                    self.bounds.Top + self.bounds.Height - 1, self.BorderColour)
+            end
+
+            paintutils.drawLine(textX, textY, textX + self:getWriteableWidth() - 1, textY, self.Background)
+
+            if self.ShowCaret and (os.epoch() - self[".cursorBlinkTimer"]) >= (1 / self.CaretBlinkSpeed) * 1000 then
+                self[".cursorBlinkTimer"] = os.epoch()
+                if self[".cursorBlinkShow"] then
+                    self[".cursorBlinkShow"] = false
+                else
+                    self[".cursorBlinkShow"] = true
+                end
+            end
+
+            if #self.Text > 0 then
+
+                term.setCursorPos(textX, textY)
+
+                local drawableText = self.Text:sub(self.PortalPosition)
+                if #drawableText > self:getWriteableWidth() then
+                    drawableText = drawableText:sub(1, -(#drawableText - self:getWriteableWidth() + 1))
+                end
+
+                term.setTextColour(self.Foreground)
+                if self.ShowCaret and self[".cursorBlinkShow"] then
+                    if self.CaretPosition > #self.Text then
+                        term.setBackgroundColour(self.Background)
+                        term.write(drawableText)
+                        term.setBackgroundColor(self.CaretColour)
+                        term.write(" ")
+                    else
+                        local pos = (self.CaretPosition - self.PortalPosition) + 1
+
+                        if pos > 1 then
+                            term.setBackgroundColour(self.Background)
+                            term.write(drawableText:sub(1, pos - 1))
+                        end
+
+                        term.setBackgroundColour(self.CaretColour)
+                        term.write(drawableText:sub(pos, pos))
+
+                        if pos < #drawableText then
+                            term.setBackgroundColour(self.Background)
+                            term.write(drawableText:sub(pos + 1))
+                        end
+                    end
+                else
+                    write(drawableText)
+                end
+            else
+                if self.ShowCaret and self[".cursorBlinkShow"] then
+                    term.setCursorPos(textX, textY)
+                    term.setBackgroundColour(self.CaretColour)
+                    term.write(" ")
+                end
+            end
+        end
+    end,
+    unfocus = function(self)
+        events:removeHandler("key", self.keyDown)
+        events:removeHandler("char", self.charDown)
+        self.ShowCaret = false
+        self.updateGraphics = true
+        threading:killThread(self.blinkThreadId)
+    end,
+    click = function(self, _, data)
+        events:addHandler("key", self.keyDown, self)
+        events:addHandler("char", self.charDown, self)
+        if not self.ShowCaret then
+            self.blinkThreadId = threading:startTimer(0.3 / self.CaretBlinkSpeed, function()
+                self.updateGraphics = true
+            end)
+        end
+        self.ShowCaret = true
+
+        local x = data.X
+        local y = data.Y
+        if self.ShowBorder then
+            if y > 1 and y < self.bounds.Height and x > 1 and x < self.bounds.Width then
+                if x < #self.Text + 1 then
+                    self:setCaretPosition(x + self.PortalPosition - 2)
+                else
+                    self:setCaretPosition(#self.Text + 1)
+                end
+            end
+        else
+            if x < #self.Text + 1 then
+                self:setCaretPosition(x + self.PortalPosition - 1)
+            else
+                self:setCaretPosition(#self.Text + 1)
+            end
+        end
+    end,
+    keyDown = function(self, _, key)
+        if key == keys.left then
+            if self.CaretPosition > 1 then
+                self:setCaretPosition(self.CaretPosition - 1)
+                self.updateGraphics = true
+            end
+        elseif key == keys.right then
+            if self.CaretPosition < #self.Text + 1 then
+                self:setCaretPosition(self.CaretPosition + 1)
+                self.updateGraphics = true
+            end
+        elseif key == keys.backspace then
+            if #self.Text > 0 then
+                if self.CaretPosition == #self.Text + 1 then
+                    if #self.Text == 1 then
+                        self.Text = ""
+                    else
+                        self.Text = self.Text:sub(1, -2)
+                    end
+                    self:setCaretPosition(self.CaretPosition - 1)
+                    self.updateGraphics = true
+                elseif self.CaretPosition == 1 then
+                    return
+                else
+                    self.Text = self.Text:sub(1, self.CaretPosition - 2) .. self.Text:sub(self.CaretPosition)
+                    self:setCaretPosition(self.CaretPosition - 1)
+                    self.updateGraphics = true
+                end
+            end
+        elseif key == keys.delete then
+            if self.CaretPosition == #self.Text + 1 then
+                return
+            elseif self.CaretPosition == 1 then
+                self.Text = self.Text:sub(2)
+                self.updateGraphics = true
+            else
+                self.Text = self.Text:sub(1, self.CaretPosition - 1) .. self.Text:sub(self.CaretPosition + 1)
+                self.updateGraphics = true
+            end
+        end
+        self.KeyPressed:invoke(self, key)
+    end,
+    charDown = function(self, _, char)
+        self.updateGraphics = true
+        if self.CaretPosition == #self.Text + 1 then
+            self.Text = self.Text .. char
+        elseif self.CaretPosition == 1 then
+            self.Text = char .. self.Text
+        else
+            self.Text = self.Text:sub(1, self.CaretPosition - 1) .. char .. self.Text:sub(self.CaretPosition)
+        end
+
+        if self.CaretPosition < #self.Text + 1 then
+            self:setCaretPosition(self.CaretPosition + 1)
+        end
+    end,
+    setText = function(self, text)
+        self.Text = text
+        self:setCaretPosition(1)
+    end,
+    getWriteableWidth = function(self)
+        return self.ShowBorder and (self.bounds.Width - 2) or self.bounds.Width
+    end,
+    setCaretPosition = function(self, index, snapToLeft)
+        if index > #self.Text + 1 then
+            error("Index was greater than the length of the Textbox contents (" .. index .. " > " ..
+                      tostring(#self.Text + 1) .. ")", 2)
+        else
+            self.CaretPosition = index
+            if snapToLeft then
+                if self.CaretPosition > self.PortalPosition + 2 then
+                    self.PortalPosition = self.CaretPosition - 2
+                end
+            else
+                if self.CaretPosition >= self.PortalPosition + self:getWriteableWidth() then
+                    self.PortalPosition = math.max(index - (self:getWriteableWidth() - 2), 1)
+                end
+            end
+
+            if self.CaretPosition < self.PortalPosition then
+                self.PortalPosition = math.max(index - 2, 1)
+            end
+
+        end
+    end,
+    destroy = function(self)
+        control.destroy(self)
+        events:removeHandler("key", self.keyDown)
+        events:removeHandler("char", self.charDown)
+        events:deleteEvent(self.KeyPressed)
+        if self.blinkThreadId ~= -1 then
+            threading:killThread(self.blinkThreadId)
+        end
+    end,
+    new = function(this)
+        this {
+            KeyPressed = events:createEvent(),
+            [".cursorBlinkTimer"] = 0,
+            [".cursorBlinkShow"] = false
+        }
+        
+        this.bounds {
+            Top = 1,
+            Left = 1,
+            Width = 10,
+            Height = 3
+        }
+    end
+}
+
+return textbox
+./PortOS/lib/data"5"D./PortOS/lib/data/number.lua"0"F./PortOS/lib/data/rect.lua"1383"Fclass 'rect' {
+    Left = 0,
+    Top = 0,
+    Width = 0,
+    Height = 0,
+
+    truncate = function(self)
+        return new 'rect'(math.floor(self.Left), math.floor(self.Top), math.floor(self.Width), math.floor(self.Height))
+    end,
+    truncateMut = function(self)
+        self.Left = math.floor(self.Left)
+        self.Top = math.floor(self.Top)
+        self.Width = math.floor(self.Width)
+        self.Height = math.floor(self.Height)
+    end,
+    intersectsWith = function(self, rect)
+        local l1x = self.Left
+        local l1y = self.Top
+        local r1x = self.Left + self.Width - 1
+        local r1y = self.Top + self.Height - 1
+
+        local l2x = rect.Left
+        local l2y = rect.Top
+        local r2x = rect.Left + rect.Width - 1
+        local r2y = rect.Top + rect.Height - 1
+
+        -- return (not (l1x > r2x or l2x > r1x)) and (not (r1y < l2y or r2y < l1y))
+        return l1x <= r2x and l2x <= r1x and r1y >= l2y and r2y >= l1y
+    end,
+
+    new = function(this, Left, Top, Width, Height)
+        if type(this) ~= "table" or this[".className"] ~= "rect" then
+            error('Incorrect calling of constructor! Please use the syntax "new \'rect\'(left,top,width,height)', 2)
+        end
+        this {
+            Left = Left or 0,
+            Top = Top or 0,
+            Width = Width or 0,
+            Height = Height or 0
+        }
+    end
+}
+
+return rect
+./PortOS/lib/data/string.lua"2685"Flocal stringbuilder = require(".PortOS.lib.data.stringbuilder")
+
+getmetatable('').__index = function(str, i)
+    if type(i) == "number" then
+        return string.sub(str, i, i)
+    else
+        return string[i]
+    end
+end
+
+string.locate = function(str, value)
+    if type(str) ~= "string" then
+        error("First argument expected string, got " .. type(str), 2)
+    end
+    for idx = 0, #str do
+        local val = str[idx]
+        if val == value then
+            return idx
+        end
+    end
+    return -1
+end
+string.split = function(str, char)
+    if char == nil then
+        char = ""
+    end
+    if type(str) ~= "string" then
+        error("First argument expected string, got " .. type(str), 2)
+    end
+    if type(char) ~= "string" then
+        error("Second argument expected string, got " .. type(char), 2)
+    end
+    local result = {}
+    if char == nil or #char == 0 then
+        for c in string.gmatch(str, ".") do
+            table.insert(result, c)
+        end
+    else
+        for c in string.gmatch(str, "([^" .. char .. "]+)") do
+            table.insert(result, c)
+        end
+    end
+
+    return result
+end
+
+string.wrap = function(str, width)
+    if width < 1 then
+        error("Width expected to be 1 or greater (1 > " .. width .. ")", 2)
+    end
+
+    local words = str:split(" ")
+    local hadBadSplit = true
+
+    while hadBadSplit do
+        hadBadSplit = false
+        local splits = {}
+        for idx, word in pairs(words) do
+            if #word > width then
+                hadBadSplit = true
+                table.insert(splits, word:sub(1, width))
+                if width + 1 <= #word then
+                    table.insert(splits, word:sub(width + 1))
+                end
+            else
+                table.insert(splits, word)
+            end
+        end
+        words = splits
+    end
+
+    local lines = {}
+    local line = new(stringbuilder)()
+    for _, word in pairs(words) do
+        if line:length() + #word + 1 > width then
+            table.insert(lines, line:remove(1, 1):build())
+            line:clear()
+        end
+        line:append(" " .. word)
+    end
+    table.insert(lines, line:remove(1, 1):build())
+
+    return lines
+end
+
+string.pad = function(str, width, padding)
+    if width < 1 then
+        error("Width expected to be 1 or greater (1 > " .. width .. ")", 2)
+    end
+    padding = padding or " "
+    if #str >= width then
+        return str
+    else
+        local pad = (width - #str) / 2
+        local padsLeft = math.ceil(math.ceil(pad) / #padding)
+        local padsRight = math.floor(math.floor(pad) / #padding)
+        return (string.rep(padding, padsLeft)) .. str .. (string.rep(padding, padsRight))
+    end
+end
+./PortOS/lib/data/stringbuilder.lua"3690"Fclass 'stringbuilder' {
+    ---Stores the string entries of a stringbuilder
+    [".entries"] = {},
+    --- Appends a string to the stringbuilder
+    ---@param self table
+    ---@param val string
+    append = function(self, val)
+        table.insert(self[".entries"], val)
+        return self
+    end,
+    ---Appends a string to the stringbuilder with a new line
+    ---@param self table
+    ---@param val string
+    appendLine = function(self, val)
+        self:append(val)
+        self:append("\n")
+        return self
+    end,
+    insert = function(self, val, idx)
+        idx = idx - 1
+        local count = 0
+        local remainder = 0
+        for key, value in pairs(self[".entries"]) do
+            if count + #value >= idx then
+                remainder = idx - count
+
+                local sideA = ""
+                if idx > 0 then
+                    sideA = value:sub(1, remainder)
+                end
+                local sideB = value:sub(remainder + 1)
+                local newValue = sideA .. val .. sideB
+
+                self[".entries"][key] = newValue
+                break
+            end
+            count = count + #value
+        end
+        return self
+    end,
+    replace = function(self, find, replace)
+        for key, value in pairs(self[".entries"]) do
+            self[".entries"][key] = value:replace(find, replace)
+        end
+        return self
+    end,
+    length = function(self)
+        local count = 0
+        for _, value in pairs(self[".entries"]) do
+            count = count + #value
+        end
+        return count
+    end,
+    remove = function(self, from, to)
+        if from < 0 then
+            from = self:length() + from
+        end
+        if to == nil then
+            to = self:length()
+        end
+        if to < 0 then
+            to = self:length() + to
+        end
+
+        local count = 0
+        local remainder = 0
+        local removing = false
+        for key, value in pairs(self[".entries"]) do
+            if removing then
+                if count + #value > to then
+                    remainder = to - count
+                    self[".entries"][key] = value:sub(remainder + 1)
+                    break
+                else
+                    count = count + #value
+                    self[".entries"][key] = ""
+                end
+            else
+                if count + #value >= from then
+                    remainder = from - count
+                    removing = true
+
+                    if count + #value >= to then
+                        local sideA = value:sub(1, remainder - 1)
+                        local sideB = value:sub(1 + to - count)
+                        self[".entries"][key] = sideA .. sideB
+                        break
+                    else
+                        self[".entries"][key] = value:sub(1, remainder - 1)
+                    end
+                end
+                count = count + #value
+            end
+        end
+
+        return self
+    end,
+    clean = function(self, build)
+        if build then
+            self[".entries"] = {self:build()}
+        else
+            local newEntries = {}
+            for _, value in pairs(self[".entries"]) do
+                if value and #value > 0 then
+                    table.insert(newEntries, value)
+                end
+            end
+            self[".entries"] = newEntries
+        end
+        return self
+    end,
+    clear = function(self)
+        self[".entries"] = {}
+        return self
+    end,
+    build = function(self)
+        return table.concat(self[".entries"], '')
+    end,
+    new = function(this, init)
+        if init ~= nil then
+            this:append(init)
+        end
+    end
+}
+
+return stringbuilder
+./PortOS/lib/data/table.lua"2749"Flocal function find(tbl, value)
+    if type(tbl) ~= "table" then
+        error("First argument expected table, got " .. type(tbl), 2)
+    end
+    for idx, val in pairs(tbl) do
+        if val == value then
+            return idx
+        end
+    end
+    return nil
+end
+table["find"] = find
+
+local function compare(tbl, tbl2)
+    if type(tbl) ~= "table" then
+        error("First argument expected table, got " .. type(tbl), 2)
+    elseif type(tbl2) ~= "table" then
+        error("Second argument expected table, got " .. type(tbl2), 2)
+    end
+    local output = {
+        conflicts = {},
+        difference = {},
+        shared = {}
+    }
+    local doConflict = function(kvp)
+        if tbl2[kvp.key] == tbl[kvp.key] then
+            output.shared[kvp.key] = kvp.value
+        else
+            if output.conflicts[kvp.key] == nil then
+                output.conflicts[kvp.key] = {kvp.value}
+            else
+                table.insert(output.conflicts[kvp.key], kvp.value)
+            end
+        end
+    end
+    for idx, val in pairs(tbl) do
+        local kvp = {}
+        kvp["key"] = idx
+        kvp["value"] = tbl[idx]
+        if tbl2[idx] then
+            doConflict(kvp)
+        else
+            output.difference[idx] = val
+        end
+    end
+    for idx, val in pairs(tbl2) do
+        local kvp = {}
+        kvp["key"] = idx
+        kvp["value"] = tbl2[idx]
+        if tbl[idx] then
+            doConflict(kvp)
+        else
+            output.difference[idx] = val
+        end
+    end
+    return output
+end
+table["compare"] = compare
+
+local function merge(tbl, tbl2)
+    if type(tbl) ~= "table" then
+        error("First argument expected table, got " .. type(tbl), 2)
+    elseif type(tbl2) ~= "table" then
+        error("Second argument expected table, got " .. type(tbl2), 2)
+    end
+    local comparison = table.compare(tbl, tbl2)
+    local appended = {}
+
+    for idx, val in pairs(comparison.difference) do
+        appended[idx] = val
+    end
+    for idx, val in pairs(comparison.shared) do
+        appended[idx] = val
+    end
+    for idx, val in pairs(comparison.conflicts) do
+        appended[idx] = val
+    end
+
+    return appended, comparison.conflicts
+end
+table["merge"] = merge
+
+local function reverse(tbl)
+    local reversed = {}
+    for idx, val in pairs(tbl) do
+        reversed[1 + #tbl - idx] = val
+    end
+    return reversed
+end
+table["reverse"] = reverse
+
+local function sub(tbl, start, finish)
+    finish = finish or #tbl
+
+    local subbed = {}
+
+    for i = start, finish do
+        table.insert(subbed, tbl[i])
+    end
+
+    return subbed
+end
+table["sub"] = sub
+
+local function shallowCopy(tbl)
+    local t = {}
+    for k, v in pairs(tbl) do
+        t[k] = v
+    end
+
+    return t
+end
+table["shallowCopy"] = shallowCopy
+./PortOS/lib/glamour.lua"1400"Flocal stringbuilder = require(".PortOS.lib.data.stringbuilder")
+
+class 'glamour' {
+    formatTable = function(tbl, depth, tabchar, tab, history)
+        if type(depth) ~= "number" then
+            error("Depth expects number, received " .. type(depth), 2)
+        elseif tab and type(tab) ~= "number" then
+            error("Tab expects number, received " .. type(tab), 2)
+        end
+
+        tabchar = tabchar or "\t"
+        if type(tbl) == "table" and depth > 0 then
+            if next(tbl) == nil then
+                return "{}"
+            end
+            local tab = tab or 1
+            local sb = new 'stringbuilder'("{\n")
+            for key, value in pairs(tbl) do
+                local line = string.rep(tabchar, tab)
+                line = line .. tostring(key) .. ": " .. glamour.formatTable(value, depth - 1, tabchar, tab + 2)
+                sb:appendLine(line)
+            end
+            sb:append(string.rep(tabchar, tab - 2) .. "}")
+
+            return sb:build()
+        elseif type(tbl) == "table" then
+            return "{" .. #tbl .. " entries}"
+        elseif type(tbl) == "function" then
+            local info = debug.getinfo(tbl, "S")
+            return info.linedefined .. info.source
+        elseif type(tbl) == "string" then
+            return "\"" .. tbl:gsub('"', '\\"') .. "\""
+        else
+            return tostring(tbl)
+        end
+    end
+}
+
+return glamour
+./PortOS/lib/lang"2"D./PortOS/lib/lang/color"2"D./PortOS/lib/lang/color/color.lua"0"F./PortOS/lib/lang/color/colorpalette.lua"27"Fclass 'colorPalette' {
+	
+}
+./PortOS/lib/lang/keywords.lua"6291"F-- if classA:extends(classB) then..
+--- Returns boolean indicating if the class contains the defined base class
+---@param self table
+---@param classB table
+local extends = function(self, classB)
+    if not type(classB) or not classB[".className"] then
+        error("Second argument expected a class, got " .. type(classB), 2)
+    end
+    if table.find(self[".classBases"], classB[".className"]) then
+        return true
+    else
+        return false
+    end
+end
+
+local instanceMetatable = {
+    __call = function(this, tbl)
+        if type(tbl) ~= "table" or tbl[".className"] then
+            error("Can only pull properties from tables", 2)
+        else
+            for k, v in pairs(tbl) do
+                this[k] = v
+            end
+        end
+
+        return this
+    end
+}
+
+local function resolveConflicts(out, conflicts, source)
+    local output = out
+    for k, _ in pairs(conflicts) do
+        output[k] = source[k]
+    end
+
+    return output
+end
+local function reinstanceTables(instance)
+    for k, v in pairs(instance) do
+        if type(v) == "table" and v[".PORTOS-STATIC_TBL"] == nil then
+            instance[k] = table.shallowCopy(v)
+            setmetatable(instance[k], getmetatable(v))
+        end
+    end
+end
+local function ctor(cl, env, ...)
+    local instance = {}
+    if cl[".classBases"] then
+        for i, b in pairs(cl[".classBases"]) do
+            local success, bInst = pcall(function()
+                return new(b, env)()
+            end)
+            if not success then
+                error("Error while constructing class " .. cl[".className"] .. ": Base Class " .. i .. " (" .. typeof(b) .. ") was invalid", 0)
+            end
+            local out, conflicts = table.merge(instance, bInst) -- Copy inheritance over, overriding previous values
+            instance = resolveConflicts(out, conflicts, bInst)
+        end
+    end
+    local n = cl[".new"](instance, cl, ...) -- Make new instance of this class, overriding inherited values
+
+    return n
+end
+
+local buildClass = function(name, classDefinition, env)
+    if classDefinition[".ctor"] or classDefinition[".className"] then
+        error("Error while defining class " .. name .. ": Cannot stack class definitions", 0)
+    end
+    classDefinition[".className"] = name
+    classDefinition[".ctor"] = function(cl, ...)
+        return ctor(cl, env, ...)
+    end
+    classDefinition[".new"] = function(inheritance, cl, ...)
+        local instance = table.shallowCopy(cl)
+        instance[".ctor"] = nil
+        instance[".new"] = nil
+        instance["new"] = nil
+        instance[".sourceClass"] = cl
+        instance[".className"] = cl[".className"]
+        instance["extends"] = extends
+        instance[".instance"] = true
+
+        local out, conflicts = table.merge(instance, inheritance)
+        instance = resolveConflicts(out, conflicts, instance)
+        
+        
+        local metatable = getmetatable(instance)
+        if metatable then
+            out, conflicts = table.merge(metatable, instanceMetatable)
+            metatable = resolveConflicts(out, conflicts, metatable)
+        else
+            metatable = table.shallowCopy(instanceMetatable)
+        end
+        setmetatable(instance, metatable)
+
+        reinstanceTables(instance)
+        cl.new(instance, ...)
+
+        return instance
+    end
+
+    env[name] = classDefinition
+    return classDefinition
+end
+
+classDef = function(name, classDefinition, inheritance, env)
+    inheritance = inheritance or {}
+
+    if type(classDefinition) == "string" then
+        return function(cl)
+            table.insert(inheritance, classDefinition)
+            return classDef(name, cl, inheritance, env)
+        end
+    elseif type(classDefinition) == "table" then
+        if not classDefinition[".classBases"] then
+            classDefinition[".classBases"] = {}
+        end
+        for _, v in pairs(inheritance) do
+            table.insert(classDefinition[".classBases"], v)
+        end
+        return buildClass(name, classDefinition, env)
+    else
+        error("Error while defining class " .. name .. ": Expected string or table, received " .. type(classDefinition),
+            0)
+    end
+end
+
+-- class 'myClass' 'yourClass'.. { ... }
+---Defines a class with a c#-like syntax
+---@param name string
+_G["class"] = function(name, env)
+    local env = type(env) == "table" and env or getfenv(2)
+    if env[name] then
+        error(string.format("Class with name %q already exists", name), 2)
+    end
+
+    return function(cl)
+        return classDef(name, cl, {}, env)
+    end
+end
+
+--- Generates a new instance of the class
+---@param cl string|table
+---@param env? table
+_G["new"] = function(cl, env)
+    if type(cl) == "string" then
+        env = env or getfenv(2)
+        if type(env[cl]) == "table" and type(env[cl][".ctor"]) == "function" then
+            def = env[cl]
+            if type(env[cl].new) ~= "function" then
+                error("Cannot instance a static class (no \"new\" function)", 2)
+            end
+            return function(...)
+                return def[".ctor"](def,...)
+            end
+        else
+            error(string.format("Object was not a class (received %s)", typeof(cl)), 2)
+        end
+    elseif type(cl) == "table" and type(cl[".ctor"]) == "function" then
+        if type(cl.new) ~= "function" then
+            error("Cannot instance a static class (no \"new\" function)", 2)
+        end
+        return function(...)
+            return cl[".ctor"](cl,...)
+        end
+    else
+        error(string.format("Object was not a class (received %s)", typeof(cl)), 2)
+    end
+end
+
+--- Gets the type of the object
+_G["typeof"] = function(a)
+    if a and type(a) == "table" and type(a[".className"]) == "string" then
+        if a[".instance"] then
+            return a[".className"]
+        else
+            return "class"
+        end
+    end
+    return type(a)
+end
+
+--- Marks a table to not be recreated when instancing a new object
+_G["static"] = function(tbl)
+    if type(tbl) == "table" then
+        tbl[".PORTOS-STATIC_TBL"] = true
+    else
+        error("Static only runs on objects. Primitive types do not need to be marked static", 2)
+    end
+    return tbl
+end
+
+-- local r = require "cc.require"
+-- local env = setmetatable({}, {
+--     __index = _ENV
+-- })
+-- _G["import"] = r.make(env, "/")
+./PortOS/lib/logger.lua"2172"Flocal stringbuilder = require(".PortOS.lib.data.stringbuilder")
+
+local Log = {
+    Entries = {},
+    Levels = {
+        "Trace",
+        "Info ",
+        "Warn ",
+        "Error",
+        "Fatal"
+    }
+}
+
+local function createEntry(self, level, message)
+    local msg = {
+        Level = level,
+        Message = message,
+        Time = os.epoch("utc")
+    }
+    table.insert(self.Entries, msg)
+end
+
+local function Write(self, level, message, location)
+    if location then
+        local msg = "@"..tostring(location).." | "..tostring(message)
+        createEntry(self, level, msg)
+    else
+        createEntry(self, level, tostring(message))
+    end
+end
+Log["Write"] = Write
+
+local function Info(self, message, location)
+    self:Write(1, message, location)
+end
+Log["Info"] = Info
+
+local function Trace(self, message, location)
+    self:Write(0, message, location)
+end
+Log["Trace"] = Trace
+
+local function Warn(self, message, location)
+    self:Write(2, message, location)
+end
+Log["Warn"] = Warn
+
+local function Error(self, message, location)
+    self:Write(3, message, location)
+end
+Log["Error"] = Error
+
+local function Fatal(self, message, location)
+    self:Write(4, message, location)
+end
+Log["Fatal"] = Fatal
+
+local function makeString(self)
+    local builder = stringbuilder.new()
+    for _,entry in pairs(self.Entries) do
+        local line = "["..(self.Levels[entry.Level]).."]"
+        local time = entry.Time / 1000
+        local time_table = os.date("*t", time)
+        local date = textutils.serialise(time_table)
+        line = " ["..(date.year).."/"..(date.month).."/"..(date.day).." "..(date.hour)..":"..(date.min)..":"..(date.sec).."] "..line
+        line = line..entry.Message
+        builder:appendLine("line")
+    end
+    
+    return builder.build()
+end
+Log["__tostring"] = makeString
+
+local function Save(self, location)
+    local isLogFile = location:sub(-3) == "log"
+    if (fs.exists(location) and not isLogFile) or isLogFile then
+        error("Location is not a valid log save location", 2)
+    else
+        local file = fs.open(location, "a")
+        file.write(self:__tostring())
+        file.close()
+    end
+end
+Log["Save"] = Save
+
+return Log
+./PortOS/lib/peripherals"2"D./PortOS/lib/peripherals/audio.lua"2720"Flocal dfpwm = require("cc.audio.dfpwm")
+
+class 'audio' {
+    speakers = {},
+    playAudio = function(self, lines)
+        local speaker = self.device
+        if type(lines) == "table" then
+            local decoder = dfpwm.make_decoder()
+            for chunk in pairs(lines) do
+                local buffer = decoder(chunk)
+
+                while not speaker.playAudio(buffer) do
+                    os.pullEvent("speaker_audio_empty")
+                end
+            end
+        elseif type(lines) == "string" then
+            if fs.exists(lines) then
+                local decoder = dfpwm.make_decoder()
+                for chunk in io.lines(lines) do
+                    local buffer = decoder(chunk)
+
+                    while not speaker.playAudio(buffer) do
+                        os.pullEvent("speaker_audio_empty")
+                    end
+                end
+            else
+                error("File could not be located", 2)
+            end
+        else
+            error("Argument 2 expected table or filepath, got " .. type(lines), 2)
+        end
+    end,
+    bindSpeaker = function(self, name)
+        if type(name) == "string" then
+            if not peripheral.isPresent(name) then
+                error("Could not find peripheral in network", 2)
+            elseif peripheral.getType(name) ~= "speaker" then
+                error("The provided peripheral was not a speaker", 2)
+            else
+                local speakerObject = peripheral.wrap(name)
+                local speaker = {
+                    device = speakerObject,
+                    play = playAudio,
+                    id = (os.epoch() + #self.speakers)
+                }
+                table.insert(self.speakers, speaker)
+                return speaker
+            end
+        elseif type(name) == "table" then
+            local success, result = pcall(peripheral.getType, name)
+            if success and result == "speaker" then
+                local speaker = {
+                    device = speakerObject,
+                    play = playAudio,
+                    id = (os.epoch("utc") + #self.speakers)
+                }
+                table.insert(audio.speakers, speaker)
+                return speaker
+            else
+                error("Argument was not a speaker", 2)
+            end
+        else
+            error("Argument expected string or peripheral, got " .. type(name), 2)
+        end
+    end,
+    unbindSpeaker = function(self, speaker)
+        local toRemove = -1
+        for idx, s in pairs(self.speakers) do
+            if s.id == speaker.id then
+                toRemove = idx
+                break
+            end
+        end
+
+        table.remove(self.speakers, toRemove)
+    end
+}
+
+return audio
+./PortOS/lib/peripherals/network.lua"6268"Flocal network = {
+    adapter = nil,
+    maxChannels = 128,
+    openChannels = 0,
+    maxChannel = 65535,
+    address = nil
+}
+
+local function scanOpenChannels(self)
+    local openChannels = {}
+    for i = 0, self.maxChannel do
+        if self.adapter.isOpen(i) then
+            table.insert(openChannels, i)
+        end
+    end
+    self.openChannels = #openChannels
+    return openChannels
+end
+network["scanOpenChannels"] = scanOpenChannels
+
+local function bindAdapter(self, name)
+    if type(name) == "string" then
+        local success, result = pcall(peripheral.getType, name)
+        if success then
+            if result == "modem" then
+                self.adapter = peripheral.wrap(name)
+            else
+                error("The provided peripheral was not a modem", 2)
+            end
+        else
+            error("The provided peripheral was not found on the network", 2)
+        end
+    elseif type(name) == "table" then
+        local success, result = pcall(peripheral.getType, name)
+        if success then
+            if result == "modem" then
+                self.adapter = name
+            else
+                error("The provided peripheral was not a modem", 2)
+            end
+        else
+            error("The provided table was not a peripheral", 2)    
+        end
+    else
+        error("Argument expected string or peripheral, got "..type(name), 2)
+    end
+    self:scanOpenChannels()
+end
+network["bindAdapter"] = bindAdapter
+
+local function openChannel(self, channel)
+    if type(channel) ~= "number" then
+        error("Argument expected number, got "..type(channel), 2)
+    elseif math.floor(channel) ~= channel then
+        error("Argument expected integer, got real ("..tostring(channel)..")", 2)
+    elseif channel < 0 or channel > self.maxChannel then
+        error("Channel must be in range 0-"..tostring(self.maxChannel)..", was "..tostring(channel), 2)
+    elseif self.openChannels == self.maxChannel then
+        error("Maximum open channels is "..tostring(self.maxChannels), 2)
+    elseif not self.adapter.isOpen(channel) then
+        self.openChannels = self.openChannels + 1
+        self.adapter.open(channel)
+    end
+end
+network["openChannel"] = openChannel
+local function closeChannel(self, channel)
+    if type(channel) ~= "number" then
+        error("Argument expected number, got "..type(channel), 2)
+    elseif math.floor(channel) ~= channel then
+        error("Argument expected integer, got real ("..tostring(channel)..")", 2)
+    elseif channel < 0 or channel > self.maxChannel then
+        error("Channel must be in range 0-"..tostring(self.maxChannel)..", was "..tostring(channel), 2)
+    elseif self.adapter.isOpen(channel) then
+        self.openChannels = self.openChannels - 1
+        self.adapter.close(channel)
+    end
+end
+network["closeChannel"] = closeChannel
+
+local function receive(self)
+    return os.pullEvent("modem_message")
+end
+network["receive"] = receive
+
+local function receiveAsync(self, callback, ...)
+    local callbackWrapper = function(...)
+        events:removeHandler("modem_message", callbackWrapper)
+        callback(...)
+    end
+    events:addHandler("modem_message", callbackWrapper, ...)
+end
+network["receiveAsync"] = receiveAsync
+
+local function receiveChannel(self, channel)
+    if type(channel) ~= "number" then
+        error("Argument expected number, got "..type(channel), 2)
+    elseif math.floor(channel) ~= channel then
+        error("Argument expected integer, got real ("..tostring(channel)..")", 2)
+    elseif channel < 0 or channel > self.maxChannel then
+        error("Channel must be in range 0-"..tostring(self.maxChannel)..", was "..tostring(channel), 2)
+    end
+    local disable = not self.adapter.isOpen(channel)
+    if disable and self.openChannels == self.maxChannels then
+        error("Too many channels open (Max "..tostring(self.maxChannels)..")", 2)
+    else
+        self:openChannel(channel)
+        while true do
+            local event, modem, rchannel, reply, message, distance = self:receive()
+            if channel == rchannel then
+                return event, modem, channel, reply, message, distance
+            end
+        end
+        if disable then
+            self:closeChannel(channel)
+        end
+    end
+end
+network["receiveChannel"] = receiveChannel
+
+local function receiveChannelAsync(self, channel, callback, ...)
+    if type(channel) ~= "number" then
+        error("Argument expected number, got "..type(channel), 2)
+    elseif math.floor(channel) ~= channel then
+        error("Argument expected integer, got real ("..(channel)..")", 2)
+    elseif channel < 0 or channel > self.maxChannel then
+        error("Argument must be in range 0-"..(self.maxChannel)..", was "..(channel), 2)
+    else
+        local disable = not self.adapter.isOpen(channel)
+        if disable and self.openChannels == self.maxChannels then
+            error("Too many channels open (Max "..(self.maxChannels)..")", 2)
+        else
+            self:openChannel(channel)
+            local callbackWrapper = function(...)
+                local args = {...}
+                if args[3] == channel then
+                    events:removeHandler("modem_message", callbackWrapper)
+                    if disable then
+                        self:closeChannel(channel)
+                    end
+                    callback(...)
+                end
+            end
+            events:addHandler("modem_message", callbackWrapper, ...)
+        end
+    end
+end
+network["receiveChannelAsync"] = receiveChannelAsync
+
+local function buildPacket(sender, destination, contents, protocol, timetolive)
+    local header = {
+        protocol = protocol,
+        sender = sender,
+        destination = destination,
+        size = #contents,
+        timetolive = timetolive or 100
+    }
+    local body = contents
+    
+    local packet = {
+        header = header,
+        body = body
+    }
+    
+    return packet
+end
+network["buildPacket"] = buildPacket
+
+local function getFreeChannel(self)
+    local packet = self.buildPacket(os.getComputerID(), "router", 0, "")
+    self.adapter.transmit(0, 0, protocol)
+    --TODO
+end
+network["getFreeChannel"] = getFreeChannel
+
+local function sendHandshake(self, channel, protocol, message)
+    self.adapter.transmit(channel, channel, 
+    --TODO
+end
+./PortOS/lib/threading.lua"2930"Flocal threading = {
+    processThreads = false,
+    threads = {}
+}
+
+local function startThread(self, delegate, ...)
+    thread = {}
+    thread["coroutine"] = coroutine.create(function()
+        delegate(unpack(arg))
+    end)
+    thread["id"] = os.epoch()
+
+    table.insert(self.threads, thread)
+    return id
+end
+threading["startThread"] = startThread
+
+local function killThread(self, id)
+    for idx, thread in pairs(self.threads) do
+        if thread.id == id then
+            coroutine.yield(thread.coroutine)
+            table.remove(self.threads, idx)
+            return threads.coroutine
+        end
+    end
+    return nil
+end
+threading["killThread"] = killThread
+
+local function startTimer(self, interval, func, ...)
+    return self:startThread(function(...)
+        while true do
+            func(...)
+            sleep(interval)
+        end
+    end, ...)
+end
+threading["startTimer"] = startTimer
+
+local function killAllThreads(self)
+    for _, thread in pairs(self.threads) do
+        coroutine.yield(thread.coroutine)
+    end
+    self.threads = {}
+end
+threading["killAllThreads"] = killAllThreads
+
+-- Based on parallel.runUntilLimit
+local function startThreadProcessor(self)
+    self.processThreads = true
+
+    local filters = {}
+    local eventData = {
+        n = 0
+    }
+    while self.processThreads do
+        local removed = 0
+        for idx, threadData in pairs(self.threads) do
+            local thread = threadData.coroutine
+            if coroutine.status(thread) == "dead" then
+                table.remove(self.threads, idx - removed)
+                removed = removed + 1
+            end
+            if filters[thread] == nil or filters[thread] == eventData[1] or eventData[1] == "terminate" then
+                local ok, param = coroutine.resume(thread, table.unpack(eventData, 1, eventData.n))
+                if ok then
+                    filters[thread] = param
+                else
+                    error(param, 0)
+                end
+                if coroutine.status(thread) == "dead" then
+                    table.remove(self.threads, idx - removed)
+                    removed = removed + 1
+                end
+            end
+        end
+        removed = 0
+        for idx, threadData in pairs(self.threads) do
+            local thread = threadData.coroutine
+            if coroutine.status(thread) == "dead" then
+                table.remove(self.threads, idx - removed)
+            end
+        end
+        eventData = table.pack(os.pullEventRaw())
+    end
+end
+threading["startThreadProcessor"] = startThreadProcessor
+
+local function stopThreadProcessor(self)
+    self.processThreads = false
+    sleep(1) -- Holds the thread running this command to ensure the completion of the command. Maybe could be shorter?
+end
+threading["stopThreadProcessor"] = stopThreadProcessor
+
+local function getThreadStatus(self, index)
+    return coroutine.status(self.threads[index])
+end
+
+return threading
+./PortOS/update.lua"1622"F-- local path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/out.ete"
+-- print("Downloading from github..")
+-- local ete = http.get(path)
+local file = fs.open("./PortOS/out.ete", "r")
+local ete = file.readAll()
+file.close()
+print("Data retrieved")
+
+function readETE(data)
+	local pathFlag = true
+	local fileLengthFlag = false
+	local fileDataFlag = false
+	local token = {}
+
+	local path = ""
+	local fileLength = 0
+	local charactersRead = 0
+
+	local typ = 0
+
+	local file
+
+	local len = #data
+	for i = 1,len do
+		local symbol = data:sub(i,i)
+		if pathFlag then
+			if symbol == "\"" then
+				print(table.concat(token))
+				path = "./testDir/"..table.concat(token, "")
+				token = {}
+				pathFlag = false
+				fileLengthFlag = true
+			else
+				table.insert(token, symbol)
+			end
+		elseif fileLengthFlag then
+			if symbol == "\"" then
+				fileLength = tonumber(table.concat(token, ""))
+				token = {}
+				fileLengthFlag = false
+				fileDataFlag = true
+				typ = 0
+			else
+				table.insert(token, symbol)
+			end 
+		elseif fileDataFlag then
+			if typ == 0 then
+				if symbol == "F" then
+					typ = 1
+					charactersRead = 0
+					print("Unpacking ", path)
+					file = fs.open(path, "w")
+				else
+					print("Creating directory at", path)
+					fs.makeDir(path)
+					fileDataFlag = false
+					pathFlag = true
+				end
+			elseif charactersRead == fileLength then
+				file.close()
+				fileDataFlag = false
+				pathFlag = true
+			else
+				file.write(symbol)
+				charactersRead = charactersRead + 1
+			end
+		end
+	end
+end
+
+print("Unpacking ETE file")
+readETE(ete)
+print("Successfully unpacked. Run PortOS/bin/boot.lua to execute")
