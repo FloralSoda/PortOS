@@ -99,6 +99,72 @@ lblTitle.bounds {
     Top = 1,
     Left = 7
 }
+local btnNewFile = new 'button' () {
+    Text = "F",
+    Background = colors.yellow,
+    Foreground = colors.black
+}
+btnNewFile.bounds {
+    Top = 19,
+    Left = 1,
+    Width = 1,
+    Height = 1
+}
+local btnNewDir = new 'button' () {
+    Text = "D",
+    Background = colors.orange,
+    Foreground = colors.white
+}
+btnNewDir.bounds {
+    Top = 19,
+    Left = 2,
+    Width = 1,
+    Height = 1
+}
+local lblPrompt = new 'label' () {
+    Text = "Enter name",
+    Foreground = colors.black,
+    Enabled = false,
+    Background = colors.lightGray
+}
+lblPrompt.bounds {
+    Top = 9,
+    Left = 2,
+    Width = 10,
+}
+local txtPrompt = new 'textbox' () {
+    ShowBorder = true,
+    Enabled = false
+}
+txtPrompt.bounds {
+    Top = 9,
+    Left = 2,
+    Width = 47,
+    Height = 3
+}
+local lblError = new 'label' () {
+    Text = "",
+    Foreground = colors.red,
+    Enabled = false,
+    Background = colors.gray
+}
+lblError.bounds {
+    Top = 19,
+    Left = 4,
+    Width = 47
+}
+
+local function printError(message)
+    lblError.Text = message
+    lblError.Enabled = true
+    lblError.updateGraphics = true
+
+    threading:startThread(function()
+        sleep(5)
+        lblError.Enabled = false
+        lblError.updateGraphics = true
+    end)
+end
 
 local function onChangeDirectory(_, _, _, prev)
     myTextbox.Text = myExplorer.fileLocation
@@ -124,11 +190,49 @@ local function nxt()
     myExplorer:navigateNext()
 end
 local function handleFileOpen(_, _, file)
-    myExplorer:openFile(file)
-    print("guh")
-    sleep(2)
+    if not myExplorer:openFile(file) then
+        printError("Cannot open file type")
+    end
 end
-
+CreateType = 0
+local function createFile()
+    CreateType = 1
+    txtPrompt.Enabled = true
+    txtPrompt.updateGraphics = true
+    lblPrompt.Enabled = true
+    lblPrompt.updateGraphics = true
+end
+local function createDir()
+    CreateType = 2
+    txtPrompt.Enabled = true
+    txtPrompt.updateGraphics = true
+    lblPrompt.Enabled = true
+    lblPrompt.updateGraphics = true
+end
+local function startCreate(_, _, key)
+    if key == keys.enter then
+        local path = (myExplorer.fileLocation) .. "/" .. txtPrompt.Text
+        if fs.isDir(path) then
+            printError("Directory already exists")
+        elseif fs.exists(path) then
+            printError("File already exists")
+        else
+            if CreateType == 1 then
+                local file = fs.open(path, "w")
+                file.write(" ")
+                file.close()
+            elseif CreateType == 2 then
+                fs.makeDir(path)
+            end
+        end
+        txtPrompt.Text = ""
+        txtPrompt.Enabled = false
+        txtPrompt.updateGraphics = true
+        lblPrompt.Enabled = false
+        lblPrompt.updateGraphics = true
+        CreateType = 0
+    end
+end
 
 events:addHandler(btnBack.Click, back)
 events:addHandler(btnNext.Click, nxt)
@@ -136,6 +240,10 @@ events:addHandler(myTextbox.KeyPressed, navigate)
 events:addHandler(myExplorer.changeDirectory, onChangeDirectory)
 events:addHandler(myButton.Click, close)
 events:addHandler(myExplorer.selectFile, handleFileOpen)
+events:addHandler(btnNewFile.Click, createFile)
+events:addHandler(btnNewDir.Click, createDir)
+events:addHandler(txtPrompt.KeyPressed, startCreate)
+
 Screen = new 'app'()
 Screen.Background = colors.white
 
@@ -146,6 +254,10 @@ Screen:addControl(btnNext)
 Screen:addControl(lblSep)
 Screen:addControl(rctBack)
 Screen:addControl(myButton)
+Screen:addControl(btnNewFile)
+Screen:addControl(btnNewDir)
+Screen:addControl(txtPrompt)
+Screen:addControl(lblPrompt)
 
 Screen:addControl(lblTitle)
 
