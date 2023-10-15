@@ -126,19 +126,21 @@ local function menu(items, startY)
 
     local drawItem = function(item, number, selected, offset)
         local y = (number - offset) + startY
-        if y < 1 or y > ty then
+        if y < 1 or y > (ty + startY) then
             return --It's offscreen, no need to draw
         end
 
         term.setCursorPos(1, y)
         if selected then
-            term.write("[ " .. item .. " ]")
+            write("[ " .. item .. " ]")
         else
-            term.write("  " .. item .. "  ")
+            write("  " .. item .. "  ")
         end
+		local length = #item + 4
+		write(string.rep(" ", tx - length))
     end
     local redraw = function()
-		term.clear()
+
     	for i = 1, #items do
         	drawItem(items[i], i, sidx == i, windowOffset)
     	end
@@ -200,15 +202,15 @@ local function compatMode()
 	local choosePackage = function(pkg)
 		term.clear()
 		term.setCursorPos(1,1)
-        term.write("Compatibility mode\n\n")
-        term.write("Package Details:\n")
-        term.write("Name:"..pkg.name.."\n")
-        term.write("Requirements:".."\n")
+        print("Compatibility mode\n")
+        print("Package Details:")
+        print("Name:"..pkg.name)
+        print("Requirements:")
         for _, dep in pairs(pkg.files) do
-            term.write(" "..dep.."\n")
+            print(" "..dep)
         end
-        term.write("\n"..pkg.description.."\n")
-        term.write("\nInstall?\n")
+        print("\n"..pkg.description)
+        print("\nInstall?")
 
         local _, y = term.getCursorPos()
         local choice = menu({ "Yes", "No" }, y)
@@ -216,7 +218,7 @@ local function compatMode()
 		return choice == 1
 	end
 
-	local listPackages = function(set)
+	local listPackages = function(set, title)
         local names = {"Back"}
         for _, pkg in pairs(set) do
             table.insert(names, pkg.name)
@@ -225,9 +227,10 @@ local function compatMode()
 		while true do
         	term.clear()
 			term.setCursorPos(1,1)
-        	term.write("Compatibility mode\n")
+        	print("Compatibility mode\n")
 
-			term.write("Select preset\n")
+            print("Select", title)
+			print("---------------------\n")
 		
             local sidx = menu(names, 3)
             if sidx == 1 then --User chose "Back"
@@ -241,7 +244,7 @@ local function compatMode()
 			end
 		end
 	end
-	
+
     local presets = function()
 		local presets = {}
         for _, pkg in pairs(pkgs) do
@@ -250,19 +253,19 @@ local function compatMode()
             end
         end
 
-		return listPackages(presets)
+		return listPackages(presets, "preset")
 	end
 	local custom = function()
-        return listPackages(pkgs)
+        return listPackages(pkgs, "package")
 	end
-	
+
 	while true do
         term.clear()
 		term.setCursorPos(1,1)
-    	term.write("Compatibility mode\n")
+    	print("Compatibility mode")
 
-    	term.write("Select install\n")
-    	term.write("---------------------\n")
+    	print("Select install")
+    	print("---------------------\n")
     	local sidx = menu({
         	"Presets",
             "Custom",
@@ -315,11 +318,11 @@ compatMode()
 -- 	if term.isColor() then
 --         term.setCursorPos(x, y)
 --         term.setBackgroundColor(color)
---         term.write(" ")
+--         print(" ")
 --     else
 --         term.setCursorPos(x, y)
 --         term.setBackgroundColor(toGrayscale(color))
--- 		term.write(" ")
+-- 		print(" ")
 -- 	end
 -- end
 -- local function drawBox(color)
