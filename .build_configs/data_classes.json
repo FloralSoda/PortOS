@@ -1,0 +1,22 @@
+{
+	"dependencies": [
+		"language"
+	],
+	"name": "Class-Dependent Primitive Utilities",
+	"description": "Adds new utilities for manipulating primitives like StringBuilder and Rects",
+	"files": {
+		"dir": {
+			"lib": {
+				"dir": {
+					"data": {
+						"files": [
+							"rect.lua",
+							"string.lua",
+							"stringbuilder.lua"
+						]
+					}
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,9 @@
+{
+  files = {
+    "basic",
+    "integrated",
+  },
+  preset = true,
+  name = "Integrated",
+  description = "The full package, minus the graphical features",
+}

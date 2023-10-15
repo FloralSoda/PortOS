@@ -1,0 +1,271 @@
+./PortOS"0"D./PortOS/lib"0"D./PortOS/lib/data"3"D./PortOS/lib/data/rect.lua"1434"Fclass 'rect' {
+    Left = 0,
+    Top = 0,
+    Width = 0,
+    Height = 0,
+
+    truncate = function(self)
+        return new 'rect'(math.floor(self.Left), math.floor(self.Top), math.floor(self.Width), math.floor(self.Height))
+    end,
+    truncateMut = function(self)
+        self.Left = math.floor(self.Left)
+        self.Top = math.floor(self.Top)
+        self.Width = math.floor(self.Width)
+        self.Height = math.floor(self.Height)
+    end,
+    intersectsWith = function(self, rect)
+        local l1x = self.Left
+        local l1y = self.Top
+        local r1x = self.Left + self.Width - 1
+        local r1y = self.Top + self.Height - 1
+
+        local l2x = rect.Left
+        local l2y = rect.Top
+        local r2x = rect.Left + rect.Width - 1
+        local r2y = rect.Top + rect.Height - 1
+
+        -- return (not (l1x > r2x or l2x > r1x)) and (not (r1y < l2y or r2y < l1y))
+        return l1x <= r2x and l2x <= r1x and r1y >= l2y and r2y >= l1y
+    end,
+
+    new = function(this, Left, Top, Width, Height)
+        if type(this) ~= "table" or this[".className"] ~= "rect" then
+            error('Incorrect calling of constructor! Please use the syntax "new \'rect\'(left,top,width,height)', 2)
+        end
+        this {
+            Left = Left or 0,
+            Top = Top or 0,
+            Width = Width or 0,
+            Height = Height or 0
+        }
+    end
+}
+
+---@diagnostic disable-next-line: undefined-global
+return rect
+./PortOS/lib/data/string.lua"2685"Flocal stringbuilder = require(".PortOS.lib.data.stringbuilder")
+
+getmetatable('').__index = function(str, i)
+    if type(i) == "number" then
+        return string.sub(str, i, i)
+    else
+        return string[i]
+    end
+end
+
+string.locate = function(str, value)
+    if type(str) ~= "string" then
+        error("First argument expected string, got " .. type(str), 2)
+    end
+    for idx = 0, #str do
+        local val = str[idx]
+        if val == value then
+            return idx
+        end
+    end
+    return -1
+end
+string.split = function(str, char)
+    if char == nil then
+        char = ""
+    end
+    if type(str) ~= "string" then
+        error("First argument expected string, got " .. type(str), 2)
+    end
+    if type(char) ~= "string" then
+        error("Second argument expected string, got " .. type(char), 2)
+    end
+    local result = {}
+    if char == nil or #char == 0 then
+        for c in string.gmatch(str, ".") do
+            table.insert(result, c)
+        end
+    else
+        for c in string.gmatch(str, "([^" .. char .. "]+)") do
+            table.insert(result, c)
+        end
+    end
+
+    return result
+end
+
+string.wrap = function(str, width)
+    if width < 1 then
+        error("Width expected to be 1 or greater (1 > " .. width .. ")", 2)
+    end
+
+    local words = str:split(" ")
+    local hadBadSplit = true
+
+    while hadBadSplit do
+        hadBadSplit = false
+        local splits = {}
+        for idx, word in pairs(words) do
+            if #word > width then
+                hadBadSplit = true
+                table.insert(splits, word:sub(1, width))
+                if width + 1 <= #word then
+                    table.insert(splits, word:sub(width + 1))
+                end
+            else
+                table.insert(splits, word)
+            end
+        end
+        words = splits
+    end
+
+    local lines = {}
+    local line = new(stringbuilder)()
+    for _, word in pairs(words) do
+        if line:length() + #word + 1 > width then
+            table.insert(lines, line:remove(1, 1):build())
+            line:clear()
+        end
+        line:append(" " .. word)
+    end
+    table.insert(lines, line:remove(1, 1):build())
+
+    return lines
+end
+
+string.pad = function(str, width, padding)
+    if width < 1 then
+        error("Width expected to be 1 or greater (1 > " .. width .. ")", 2)
+    end
+    padding = padding or " "
+    if #str >= width then
+        return str
+    else
+        local pad = (width - #str) / 2
+        local padsLeft = math.ceil(math.ceil(pad) / #padding)
+        local padsRight = math.floor(math.floor(pad) / #padding)
+        return (string.rep(padding, padsLeft)) .. str .. (string.rep(padding, padsRight))
+    end
+end
+./PortOS/lib/data/stringbuilder.lua"3741"Fclass 'stringbuilder' {
+    ---Stores the string entries of a stringbuilder
+    [".entries"] = {},
+    --- Appends a string to the stringbuilder
+    ---@param self table
+    ---@param val string
+    append = function(self, val)
+        table.insert(self[".entries"], val)
+        return self
+    end,
+    ---Appends a string to the stringbuilder with a new line
+    ---@param self table
+    ---@param val string
+    appendLine = function(self, val)
+        self:append(val)
+        self:append("\n")
+        return self
+    end,
+    insert = function(self, val, idx)
+        idx = idx - 1
+        local count = 0
+        local remainder = 0
+        for key, value in pairs(self[".entries"]) do
+            if count + #value >= idx then
+                remainder = idx - count
+
+                local sideA = ""
+                if idx > 0 then
+                    sideA = value:sub(1, remainder)
+                end
+                local sideB = value:sub(remainder + 1)
+                local newValue = sideA .. val .. sideB
+
+                self[".entries"][key] = newValue
+                break
+            end
+            count = count + #value
+        end
+        return self
+    end,
+    replace = function(self, find, replace)
+        for key, value in pairs(self[".entries"]) do
+            self[".entries"][key] = value:replace(find, replace)
+        end
+        return self
+    end,
+    length = function(self)
+        local count = 0
+        for _, value in pairs(self[".entries"]) do
+            count = count + #value
+        end
+        return count
+    end,
+    remove = function(self, from, to)
+        if from < 0 then
+            from = self:length() + from
+        end
+        if to == nil then
+            to = self:length()
+        end
+        if to < 0 then
+            to = self:length() + to
+        end
+
+        local count = 0
+        local remainder = 0
+        local removing = false
+        for key, value in pairs(self[".entries"]) do
+            if removing then
+                if count + #value > to then
+                    remainder = to - count
+                    self[".entries"][key] = value:sub(remainder + 1)
+                    break
+                else
+                    count = count + #value
+                    self[".entries"][key] = ""
+                end
+            else
+                if count + #value >= from then
+                    remainder = from - count
+                    removing = true
+
+                    if count + #value >= to then
+                        local sideA = value:sub(1, remainder - 1)
+                        local sideB = value:sub(1 + to - count)
+                        self[".entries"][key] = sideA .. sideB
+                        break
+                    else
+                        self[".entries"][key] = value:sub(1, remainder - 1)
+                    end
+                end
+                count = count + #value
+            end
+        end
+
+        return self
+    end,
+    clean = function(self, build)
+        if build then
+            self[".entries"] = {self:build()}
+        else
+            local newEntries = {}
+            for _, value in pairs(self[".entries"]) do
+                if value and #value > 0 then
+                    table.insert(newEntries, value)
+                end
+            end
+            self[".entries"] = newEntries
+        end
+        return self
+    end,
+    clear = function(self)
+        self[".entries"] = {}
+        return self
+    end,
+    build = function(self)
+        return table.concat(self[".entries"], '')
+    end,
+    new = function(this, init)
+        if init ~= nil then
+            this:append(init)
+        end
+    end
+}
+
+---@diagnostic disable-next-line: undefined-global
+return stringbuilder

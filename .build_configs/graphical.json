@@ -1,0 +1,26 @@
+{
+	"dependencies": [
+		"integrated"
+	],
+	"preset": true,
+	"name": "Graphical",
+	"description": "The full package, but without the applications",
+	"files": {
+		"dir": {
+			"lib": {
+				"dir": {
+					"controls": {
+						"files": [
+							"*"
+						]
+					},
+					"graphics": {
+						"files": [
+							"*"
+						]
+					}
+				}
+			}
+		}
+	}
+}

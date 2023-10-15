@@ -1,0 +1,10 @@
+{
+  files = {
+    "language",
+    "threading",
+    "basic",
+  },
+  preset = false,
+  name = "Basic",
+  description = "The simplest install available. Only contains the simple class features, multithreading and the operating system's internal systems",
+}

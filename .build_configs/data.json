@@ -1,0 +1,21 @@
+{
+	"dependencies": [
+		"license"
+	],
+	"name": "Primitive Extensions",
+	"description": "Extends the functionality of primitive types like table and number",
+	"files": {
+		"dir": {
+			"lib": {
+				"dir": {
+					"data": {
+						"files": [
+							"number.lua",
+							"table.lua"
+						]
+					}
+				}
+			}
+		}
+	}
+}

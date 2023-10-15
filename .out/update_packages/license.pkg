@@ -1,0 +1,8 @@
+{
+  files = {
+    "license",
+  },
+  preset = false,
+  name = "Licensing",
+  description = "Simply the license and README files. License is currently MIT",
+}

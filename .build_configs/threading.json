@@ -1,0 +1,14 @@
+{
+	"dependencies": [ "license" ],
+	"name": "Threading",
+	"description": "Simulates Simultaneous Multithreading (SMT) capabilities utilising coroutines",
+	"files": {
+		"dir": {
+			"lib": {
+				"files": [
+					"threading.lua"
+				]
+			}
+		}
+	}
+}

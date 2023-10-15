@@ -1,0 +1,11 @@
+{
+	"dependencies": [],
+	"name": "Licensing",
+	"description": "Simply the license and README files. License is currently MIT",
+	"files": {
+		"files": [
+			"LICENSE",
+			"README.md"
+		]
+	}
+}

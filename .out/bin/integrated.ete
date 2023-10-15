@@ -1,0 +1,539 @@
+./PortOS"0"D./PortOS/lib"2"D./PortOS/lib/peripherals"2"D./PortOS/lib/peripherals/audio.lua"2723"Flocal dfpwm = require("cc.audio.dfpwm")
+
+class 'audio' {
+    speakers = {},
+    playAudio = function(self, lines)
+        local speaker = self.device
+        if type(lines) == "table" then
+            local decoder = dfpwm.make_decoder()
+            for chunk in pairs(lines) do
+                local buffer = decoder(chunk)
+
+                while not speaker.playAudio(buffer) do
+                    os.pullEvent("speaker_audio_empty")
+                end
+            end
+        elseif type(lines) == "string" then
+            if fs.exists(lines) then
+                local decoder = dfpwm.make_decoder()
+                for chunk in io.lines(lines) do
+                    local buffer = decoder(chunk)
+
+                    while not speaker.playAudio(buffer) do
+                        os.pullEvent("speaker_audio_empty")
+                    end
+                end
+            else
+                error("File could not be located", 2)
+            end
+        else
+            error("Argument 2 expected table or filepath, got " .. type(lines), 2)
+        end
+    end,
+    bindSpeaker = function(self, name)
+        if type(name) == "string" then
+            if not peripheral.isPresent(name) then
+                error("Could not find peripheral in network", 2)
+            elseif peripheral.getType(name) ~= "speaker" then
+                error("The provided peripheral was not a speaker", 2)
+            else
+                local speakerObject = peripheral.wrap(name)
+                local speaker = {
+                    device = speakerObject,
+                    play = audio.playAudio,
+                    id = (os.epoch() + #self.speakers)
+                }
+                table.insert(self.speakers, speaker)
+                return speaker
+            end
+        elseif type(name) == "table" then
+            local success, result = pcall(peripheral.getType, name)
+            if success and result == "speaker" then
+                local speaker = {
+                    device = name,
+                    play = audio.playAudio,
+                    id = (os.epoch("utc") + #self.speakers)
+                }
+                table.insert(audio.speakers, speaker)
+                return speaker
+            else
+                error("Argument was not a speaker", 2)
+            end
+        else
+            error("Argument expected string or peripheral, got " .. type(name), 2)
+        end
+    end,
+    unbindSpeaker = function(self, speaker)
+        local toRemove = -1
+        for idx, s in pairs(self.speakers) do
+            if s.id == speaker.id then
+                toRemove = idx
+                break
+            end
+        end
+
+        table.remove(self.speakers, toRemove)
+    end
+}
+
+return audio
+./PortOS/lib/peripherals/network.lua"6218"Flocal network = {
+    adapter = nil,
+    maxChannels = 128,
+    openChannels = 0,
+    maxChannel = 65535,
+    address = nil
+}
+
+local function scanOpenChannels(self)
+    local openChannels = {}
+    for i = 0, self.maxChannel do
+        if self.adapter.isOpen(i) then
+            table.insert(openChannels, i)
+        end
+    end
+    self.openChannels = #openChannels
+    return openChannels
+end
+network["scanOpenChannels"] = scanOpenChannels
+
+local function bindAdapter(self, name)
+    if type(name) == "string" then
+        local success, result = pcall(peripheral.getType, name)
+        if success then
+            if result == "modem" then
+                self.adapter = peripheral.wrap(name)
+            else
+                error("The provided peripheral was not a modem", 2)
+            end
+        else
+            error("The provided peripheral was not found on the network", 2)
+        end
+    elseif type(name) == "table" then
+        local success, result = pcall(peripheral.getType, name)
+        if success then
+            if result == "modem" then
+                self.adapter = name
+            else
+                error("The provided peripheral was not a modem", 2)
+            end
+        else
+            error("The provided table was not a peripheral", 2)    
+        end
+    else
+        error("Argument expected string or peripheral, got "..type(name), 2)
+    end
+    self:scanOpenChannels()
+end
+network["bindAdapter"] = bindAdapter
+
+local function openChannel(self, channel)
+    if type(channel) ~= "number" then
+        error("Argument expected number, got "..type(channel), 2)
+    elseif math.floor(channel) ~= channel then
+        error("Argument expected integer, got real ("..tostring(channel)..")", 2)
+    elseif channel < 0 or channel > self.maxChannel then
+        error("Channel must be in range 0-"..tostring(self.maxChannel)..", was "..tostring(channel), 2)
+    elseif self.openChannels == self.maxChannel then
+        error("Maximum open channels is "..tostring(self.maxChannels), 2)
+    elseif not self.adapter.isOpen(channel) then
+        self.openChannels = self.openChannels + 1
+        self.adapter.open(channel)
+    end
+end
+network["openChannel"] = openChannel
+local function closeChannel(self, channel)
+    if type(channel) ~= "number" then
+        error("Argument expected number, got "..type(channel), 2)
+    elseif math.floor(channel) ~= channel then
+        error("Argument expected integer, got real ("..tostring(channel)..")", 2)
+    elseif channel < 0 or channel > self.maxChannel then
+        error("Channel must be in range 0-"..tostring(self.maxChannel)..", was "..tostring(channel), 2)
+    elseif self.adapter.isOpen(channel) then
+        self.openChannels = self.openChannels - 1
+        self.adapter.close(channel)
+    end
+end
+network["closeChannel"] = closeChannel
+
+local function receive(self)
+    return os.pullEvent("modem_message")
+end
+network["receive"] = receive
+
+local function receiveAsync(self, callback, ...)
+    CallbackWrapper = function(...)
+        events:removeHandler("modem_message", CallbackWrapper)
+        callback(...)
+    end
+    events:addHandler("modem_message", CallbackWrapper, ...)
+end
+network["receiveAsync"] = receiveAsync
+
+local function receiveChannel(self, channel)
+    if type(channel) ~= "number" then
+        error("Argument expected number, got "..type(channel), 2)
+    elseif math.floor(channel) ~= channel then
+        error("Argument expected integer, got real ("..tostring(channel)..")", 2)
+    elseif channel < 0 or channel > self.maxChannel then
+        error("Channel must be in range 0-"..tostring(self.maxChannel)..", was "..tostring(channel), 2)
+    end
+    local disable = not self.adapter.isOpen(channel)
+    if disable and self.openChannels == self.maxChannels then
+        error("Too many channels open (Max "..tostring(self.maxChannels)..")", 2)
+    else
+        self:openChannel(channel)
+        while true do
+            local event, modem, rchannel, reply, message, distance = self:receive()
+            if channel == rchannel then
+                return event, modem, channel, reply, message, distance
+            end
+        end
+        if disable then
+            self:closeChannel(channel)
+        end
+    end
+end
+network["receiveChannel"] = receiveChannel
+
+local function receiveChannelAsync(self, channel, callback, ...)
+    if type(channel) ~= "number" then
+        error("Argument expected number, got "..type(channel), 2)
+    elseif math.floor(channel) ~= channel then
+        error("Argument expected integer, got real ("..(channel)..")", 2)
+    elseif channel < 0 or channel > self.maxChannel then
+        error("Argument must be in range 0-"..(self.maxChannel)..", was "..(channel), 2)
+    else
+        local disable = not self.adapter.isOpen(channel)
+        if disable and self.openChannels == self.maxChannels then
+            error("Too many channels open (Max "..(self.maxChannels)..")", 2)
+        else
+            self:openChannel(channel)
+            CallbackWrapper = function(...)
+                local args = {...}
+                if args[3] == channel then
+                    events:removeHandler("modem_message", CallbackWrapper)
+                    if disable then
+                        self:closeChannel(channel)
+                    end
+                    callback(...)
+                end
+            end
+            events:addHandler("modem_message", CallbackWrapper, ...)
+        end
+    end
+end
+network["receiveChannelAsync"] = receiveChannelAsync
+
+local function buildPacket(sender, destination, contents, protocol, timetolive)
+    local header = {
+        protocol = protocol,
+        sender = sender,
+        destination = destination,
+        size = #contents,
+        timetolive = timetolive or 100
+    }
+    local body = contents
+    
+    local packet = {
+        header = header,
+        body = body
+    }
+    
+    return packet
+end
+network["buildPacket"] = buildPacket
+
+local function getFreeChannel(self)
+    local packet = self.buildPacket(os.getComputerID(), "router", 0, "")
+    
+    --TODO
+end
+network["getFreeChannel"] = getFreeChannel
+
+local function sendHandshake(self, channel, protocol, message)
+    self.adapter.transmit(channel, channel)
+    --TODO
+end
+./PortOS/lib/glamour.lua"1502"Flocal stringbuilder = require(".PortOS.lib.data.stringbuilder")
+
+class 'glamour' {
+    formatTable = function(tbl, depth, tabchar, tab, history)
+        if type(depth) ~= "number" then
+            error("Depth expects number, received " .. type(depth), 2)
+        elseif tab and type(tab) ~= "number" then
+            error("Tab expects number, received " .. type(tab), 2)
+        end
+
+        tabchar = tabchar or "\t"
+        if type(tbl) == "table" and depth > 0 then
+            if next(tbl) == nil then
+                return "{}"
+            end
+            local tab = tab or 1
+            local sb = new 'stringbuilder'("{\n")
+            for key, value in pairs(tbl) do
+                local line = string.rep(tabchar, tab)
+---@diagnostic disable-next-line: undefined-global
+                line = line .. tostring(key) .. ": " .. glamour.formatTable(value, depth - 1, tabchar, tab + 2)
+                sb:appendLine(line)
+            end
+            sb:append(string.rep(tabchar, tab - 2) .. "}")
+
+            return sb:build()
+        elseif type(tbl) == "table" then
+            return "{" .. #tbl .. " entries}"
+        elseif type(tbl) == "function" then
+            local info = debug.getinfo(tbl, "S")
+            return info.linedefined .. info.source
+        elseif type(tbl) == "string" then
+            return "\"" .. tbl:gsub('"', '\\"') .. "\""
+        else
+            return tostring(tbl)
+        end
+    end
+}
+
+---@diagnostic disable-next-line: undefined-global
+return glamour
+./PortOS/lib/logger.lua"2172"Flocal stringbuilder = require(".PortOS.lib.data.stringbuilder")
+
+local Log = {
+    Entries = {},
+    Levels = {
+        "Trace",
+        "Info ",
+        "Warn ",
+        "Error",
+        "Fatal"
+    }
+}
+
+local function createEntry(self, level, message)
+    local msg = {
+        Level = level,
+        Message = message,
+        Time = os.epoch("utc")
+    }
+    table.insert(self.Entries, msg)
+end
+
+local function Write(self, level, message, location)
+    if location then
+        local msg = "@"..tostring(location).." | "..tostring(message)
+        createEntry(self, level, msg)
+    else
+        createEntry(self, level, tostring(message))
+    end
+end
+Log["Write"] = Write
+
+local function Info(self, message, location)
+    self:Write(1, message, location)
+end
+Log["Info"] = Info
+
+local function Trace(self, message, location)
+    self:Write(0, message, location)
+end
+Log["Trace"] = Trace
+
+local function Warn(self, message, location)
+    self:Write(2, message, location)
+end
+Log["Warn"] = Warn
+
+local function Error(self, message, location)
+    self:Write(3, message, location)
+end
+Log["Error"] = Error
+
+local function Fatal(self, message, location)
+    self:Write(4, message, location)
+end
+Log["Fatal"] = Fatal
+
+local function makeString(self)
+    local builder = stringbuilder.new()
+    for _,entry in pairs(self.Entries) do
+        local line = "["..(self.Levels[entry.Level]).."]"
+        local time = entry.Time / 1000
+        local time_table = os.date("*t", time)
+        local date = textutils.serialise(time_table)
+        line = " ["..(date.year).."/"..(date.month).."/"..(date.day).." "..(date.hour)..":"..(date.min)..":"..(date.sec).."] "..line
+        line = line..entry.Message
+        builder:appendLine("line")
+    end
+    
+    return builder.build()
+end
+Log["__tostring"] = makeString
+
+local function Save(self, location)
+    local isLogFile = location:sub(-3) == "log"
+    if (fs.exists(location) and not isLogFile) or isLogFile then
+        error("Location is not a valid log save location", 2)
+    else
+        local file = fs.open(location, "a")
+        file.write(self:__tostring())
+        file.close()
+    end
+end
+Log["Save"] = Save
+
+return Log
+./PortOS/bin"3"D./PortOS/bin/.bashrc"1050"F# ~/.bashrc: executed by bash for non-login shells
+# this .bashrc is made for PortOS and may not reflect 100% accurately on other systems.
+# conversely, other systems' .bashrc may not reflect 100% accurately on PortOS.
+
+# If not running interactively, don't do anything
+[ -z *$PS1* ] && return
+
+# don't put duplicate lines in the history
+# ... of force ignoredups and ignorespace
+HISTCONTROL=ignoredups:ignorespace
+
+#append to the history file, don't overwrite it
+shopt -s histappend
+
+# for setting history length see HISTSIZE and HISTFILESIZE
+HISTSIZE=1000
+HISTFILESIZE=2000
+
+# check the window size after each command and, if necessary,
+# update the values of LINES and COLUMNS
+shopt -s checkwinsize
+
+# make less more friendly for non-text input files
+[ -x  /usr/bin/lesspipe ] && eval *$(SHELL=/bin/bash lesspipe)
+
+# Uncomment for a colored prompt, if the terminal has the capability;
+# turned off by default to not distract the user: the focus in a terminal
+# window should be on the output of commands, not on the prompt
+#force_color_prompt=yes
+./PortOS/bin/bash.lua"2651"F--This must not rely on PortOS systems as this is the fallback in case anything breaks.
+local args = {...}
+
+if #args > 1 then
+	
+end
+
+--Not using actual root for the root directory. This is to keep PortOS
+--self contained, in case users don't want the OS taking over the whole PC
+local root = "./PortOS/root"
+
+local running = true
+local insert = false
+local caretPosition = 1
+local currentToken = {}
+local posix = false
+
+local function split_string(str)
+	local output = {}
+	for idx,char in pairs(str) do
+		output[idx] = char
+	end
+
+	return output
+end
+
+local function parseArguments(arguments)
+	local aliases = {
+		["--dump-strings"] = "-d",
+		["--verbose"] = "-v",
+		["--init-file"] = "--rcfile"
+	}
+
+	local expect_args = {}
+	local printHelp = false
+	local dump_strings = false
+	local options = true
+
+	for _,arg in pairs(arguments) do
+		if options then
+			local current = aliases[arg] or arg
+			local islong = current:sub(2,2) == "-"
+			current = (islong and current:sub(3) or current:sub(1)):lower()
+			if current == "help" then
+				printHelp = true
+			elseif current == "d" then
+				dump_strings = true
+			elseif current == "rcfile" then
+				table.insert(expect_args, "rcfile")
+			elseif not islong then
+				for _,c in pairs(split_string(current)) do
+					table.insert(arguments, "-"..c)
+				end
+			else --It's long and not a recognised argument above
+				write("Unknown symbol \"--", current, "\"")
+			end
+		end
+	end
+end
+
+local function parseCommand(command)
+	command = command or currentToken
+
+	for _,ch in pairs(command) do
+		if ch == "#" then
+			break
+		end
+	end
+end
+
+local function listenForInput()
+	while running do
+		local data = {os.pullEvent("key")}
+
+		if data[2] == keys.enter or data[2] == keys.numPadEnter then
+			parseCommand()
+		elseif data[2] == keys.home then
+			caretPosition = 1
+		elseif data[2] == keys["end"] then
+			caretPosition = #currentToken
+		elseif data[2] == keys.insert then
+			insert = not insert
+		elseif data[2] == keys.delete and caretPosition < #currentToken then
+			table.remove(currentToken, caretPosition + 1)
+		elseif data[2] == keys.backspace and caretPosition > 1 then
+			table.remove(currentToken, caretPosition)
+			caretPosition = caretPosition - 1
+		elseif data[2] == keys.left and caretPosition > 1 then
+			caretPosition = caretPosition - 1
+		elseif data[2] == keys.right and caretPosition < #currentToken then
+			caretPosition = caretPosition + 1
+		else
+			local toAdd = keys.getName(data[2])
+			if #toAdd == 1 then
+				if insert then
+					currentToken[caretPosition] = toAdd
+				else
+					table.insert(currentToken, toAdd, caretPosition)
+				end
+				caretPosition = caretPosition + 1
+			end
+		end
+	end
+end
+./PortOS/bin/download.lua"558"Flocal args = {...}
+
+fs.makeDir("PortOS/Users/Global")
+fs.makeDir("PortOS/Users/Global/Downloads")
+
+local url = args[1]
+if url then
+    if http.checkURL(url) then
+        local request = http.get(url)
+        local data = request.readAll()
+        request.close()
+        local slash = url:reverse():find("%/")
+        local name = url:sub(1-slash)
+        local file = fs.open("PortOS/Users/Global/Downloads/"..name, "w")
+        file.write(data)
+        file.close()
+    else
+        error("Invalid URL")
+    end
+else
+    error("Usage: download <URL>")
+end

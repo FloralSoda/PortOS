@@ -1,0 +1,9 @@
+{
+  files = {
+    "license",
+    "data",
+  },
+  preset = false,
+  name = "Primitive Extensions",
+  description = "Extends the functionality of primitive types like table and number",
+}

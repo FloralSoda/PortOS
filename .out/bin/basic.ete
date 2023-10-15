@@ -1,0 +1,562 @@
+./PortOS"2"D./PortOS/lib"1"D./PortOS/lib/lang"1"D./PortOS/lib/lang/keywords.lua"6705"F-- if classA:extends(classB) then..
+--- Returns boolean indicating if the class contains the defined base class
+---@param self table
+---@param classB table
+local extends = function(self, classB)
+    if type(classB) ~= "table" or  not classB[".className"] then
+        error("Second argument expected a class, got " .. type(classB), 2)
+    end
+    if table.find(self[".classBases"], classB[".className"]) then
+        return true
+    else
+        return false
+    end
+end
+
+local instanceMetatable = {
+    __call = function(this, tbl)
+        if type(tbl) ~= "table" or tbl[".className"] then
+            error("Can only pull properties from tables", 2)
+        else
+            for k, v in pairs(tbl) do
+                this[k] = v
+            end
+        end
+
+        return this
+    end
+}
+
+local function resolveConflicts(out, conflicts, source)
+    local output = out
+    for k, _ in pairs(conflicts) do
+        output[k] = source[k]
+    end
+
+    return output
+end
+local function reinstanceTables(instance)
+    for k, v in pairs(instance) do
+        if type(v) == "table" and v[".PORTOS-STATIC_TBL"] == nil then
+            instance[k] = table.shallowCopy(v)
+            setmetatable(instance[k], getmetatable(v))
+        end
+    end
+end
+local function ctor(cl, env, ...)
+    local instance = {}
+    if cl[".classBases"] then
+        for i, b in pairs(cl[".classBases"]) do
+            local success, bInst = pcall(function()
+                return new(b, env)()
+            end)
+            if not success then
+                error("Error while constructing class " .. cl[".className"] .. ": Base Class " .. i .. " (" .. typeof(b) .. ") was invalid", 0)
+            end
+            local out, conflicts = table.merge(instance, bInst) -- Copy inheritance over, overriding previous values
+            instance = resolveConflicts(out, conflicts, bInst)
+        end
+    end
+    local n = cl[".new"](instance, cl, ...) -- Make new instance of this class, overriding inherited values
+
+    return n
+end
+
+local buildClass = function(name, classDefinition, env)
+    if classDefinition[".ctor"] or classDefinition[".className"] then
+        error("Error while defining class " .. name .. ": Cannot stack class definitions", 0)
+    end
+    classDefinition[".className"] = name
+    classDefinition[".ctor"] = function(cl, ...)
+        return ctor(cl, env, ...)
+    end
+    classDefinition[".new"] = function(inheritance, cl, ...)
+        local instance = table.shallowCopy(cl)
+        instance[".ctor"] = nil
+        instance[".new"] = nil
+        instance["new"] = nil
+        instance[".sourceClass"] = cl
+        instance[".className"] = cl[".className"]
+        instance["extends"] = extends
+        instance[".instance"] = true
+
+        local out, conflicts = table.merge(instance, inheritance)
+        instance = resolveConflicts(out, conflicts, instance)
+        
+        
+        local metatable = getmetatable(instance)
+        if metatable then
+            out, conflicts = table.merge(metatable, instanceMetatable)
+            metatable = resolveConflicts(out, conflicts, metatable)
+        else
+            metatable = table.shallowCopy(instanceMetatable)
+        end
+        setmetatable(instance, metatable)
+
+        reinstanceTables(instance)
+        cl.new(instance, ...)
+
+        return instance
+    end
+
+    env[name] = classDefinition
+    return classDefinition
+end
+
+ClassDef = function(name, classDefinition, inheritance, env)
+    inheritance = inheritance or {}
+
+    if type(classDefinition) == "string" then
+        return function(cl)
+            table.insert(inheritance, classDefinition)
+            return ClassDef(name, cl, inheritance, env)
+        end
+    elseif type(classDefinition) == "table" then
+        if not classDefinition[".classBases"] then
+            classDefinition[".classBases"] = {}
+        end
+        for _, v in pairs(inheritance) do
+            table.insert(classDefinition[".classBases"], v)
+        end
+        return buildClass(name, classDefinition, env)
+    else
+        error("Error while defining class " .. name .. ": Expected string or table, received " .. type(classDefinition),
+            0)
+    end
+end
+
+-- class 'myClass' 'yourClass'.. { ... }
+---Defines a class with a c#-like syntax
+---@param name string
+---@diagnostic disable-next-line: duplicate-set-field
+_G["class"] = function(name, env)
+    --TODO: getfenv is deprecated. Need to figure out how to implement this in a non-deprecated way
+    local env = type(env) == "table" and env or getfenv(2)
+    if env[name] then
+        error(string.format("Class with name %q already exists", name), 2)
+    end
+
+    return function(cl)
+        return ClassDef(name, cl, {}, env)
+    end
+end
+
+--- Generates a new instance of the class
+---@param cl string|table
+---@param env? table
+---@diagnostic disable-next-line: duplicate-set-field
+_G["new"] = function(cl, env)
+    if type(cl) == "string" then
+        --TODO: getfenv is deprecated. Must figure out how to implement this in 5.2
+        env = env or getfenv(2)
+        if type(env[cl]) == "table" and type(env[cl][".ctor"]) == "function" then
+            local def = env[cl]
+            if type(env[cl].new) ~= "function" then
+                error("Cannot instance a static class (no \"new\" function)", 2)
+            end
+            return function(...)
+                return def[".ctor"](def,...)
+            end
+        else
+            error(string.format("Object was not a class (received %s)", typeof(cl)), 2)
+        end
+    elseif type(cl) == "table" and type(cl[".ctor"]) == "function" then
+        if type(cl.new) ~= "function" then
+            error("Cannot instance a static class (no \"new\" function)", 2)
+        end
+        return function(...)
+            return cl[".ctor"](cl,...)
+        end
+    else
+        error(string.format("Object was not a class (received %s)", typeof(cl)), 2)
+    end
+end
+
+--- Gets the type of the object
+---@diagnostic disable-next-line: duplicate-set-field
+_G["typeof"] = function(a)
+    if a and type(a) == "table" and type(a[".className"]) == "string" then
+        if a[".instance"] then
+            return a[".className"]
+        else
+            return "class"
+        end
+    end
+    return type(a)
+end
+
+--- Marks a table to not be recreated when instancing a new object
+---@diagnostic disable-next-line: duplicate-set-field
+_G["static"] = function(tbl)
+    if type(tbl) == "table" then
+        tbl[".PORTOS-STATIC_TBL"] = true
+    else
+        error("Static only runs on objects. Primitive types do not need to be marked static", 2)
+    end
+    return tbl
+end
+
+-- local r = require "cc.require"
+-- local env = setmetatable({}, {
+--     __index = _ENV
+-- })
+-- _G["import"] = r.make(env, "/")
+./PortOS/lib/threading.lua"3494"Flocal threading = {
+    processThreads = false,
+    threads = {}
+}
+
+local function startThread(self, delegate, ...)
+    local thread = {}
+    thread["coroutine"] = coroutine.create(function()
+        delegate(table.unpack(arg))
+    end)
+    thread["id"] = os.epoch()
+
+    table.insert(self.threads, thread)
+    return thread["id"]
+end
+threading["startThread"] = startThread
+
+local function pauseThread(self, id)
+    for idx, thread in pairs(self.threads) do
+        if thread.id == id then
+            coroutine.yield(thread.coroutine)
+            return self.threads.coroutine
+        end
+    end
+end
+threading["pauseThread"] = pauseThread
+local function resumeThread(self, id)
+    for idx, thread in pairs(self.threads) do
+        if thread.id == id then
+            coroutine.resume(thread.coroutine)
+            return self.threads.coroutine
+        end
+    end
+end
+threading["resumeThread"] = resumeThread
+
+local function killThread(self, id)
+    for idx, thread in pairs(self.threads) do
+        if thread.id == id then
+            coroutine.yield(thread.coroutine)
+            table.remove(self.threads, idx)
+            return self.threads.coroutine
+        end
+    end
+    return nil
+end
+threading["killThread"] = killThread
+
+local function startTimer(self, interval, func, ...)
+    return self:startThread(function(...)
+        while true do
+            func(...)
+            sleep(interval)
+        end
+    end, ...)
+end
+threading["startTimer"] = startTimer
+
+local function killAllThreads(self)
+    for _, thread in pairs(self.threads) do
+        coroutine.yield(thread.coroutine)
+    end
+    self.threads = {}
+end
+threading["killAllThreads"] = killAllThreads
+
+-- Based on parallel.runUntilLimit
+local function startThreadProcessor(self)
+    self.processThreads = true
+
+    local filters = {}
+    local eventData = {
+        n = 0
+    }
+    while self.processThreads do
+        local removed = 0
+        for idx, threadData in pairs(self.threads) do
+            local thread = threadData.coroutine
+            if coroutine.status(thread) == "dead" then
+                table.remove(self.threads, idx - removed)
+                removed = removed + 1
+            end
+            if filters[thread] == nil or filters[thread] == eventData[1] or eventData[1] == "terminate" then
+                local ok, param = coroutine.resume(thread, table.unpack(eventData, 1, eventData.n))
+                if ok then
+                    filters[thread] = param
+                else
+                    error(param, 0)
+                end
+                if coroutine.status(thread) == "dead" then
+                    table.remove(self.threads, idx - removed)
+                    removed = removed + 1
+                end
+            end
+        end
+        removed = 0
+        for idx, threadData in pairs(self.threads) do
+            local thread = threadData.coroutine
+            if coroutine.status(thread) == "dead" then
+                table.remove(self.threads, idx - removed)
+            end
+        end
+        eventData = table.pack(os.pullEventRaw())
+    end
+end
+threading["startThreadProcessor"] = startThreadProcessor
+
+local function stopThreadProcessor(self)
+    self.processThreads = false
+    sleep(1) -- Holds the thread running this command to ensure the completion of the command. Maybe could be shorter?
+end
+threading["stopThreadProcessor"] = stopThreadProcessor
+
+local function getThreadStatus(self, index)
+    return coroutine.status(self.threads[index])
+end
+
+return threading
+./PortOS/bin"4"D./PortOS/bin/data"1"D./PortOS/bin/data/default.reg"52"F{
+  fileHandlers = {
+    [ ".lua" ] = "edit",
+  },
+}./PortOS/bin/boot.lua"596"Fterm.clear()
+term.setCursorPos(1, 1)
+print("Loading libraries..")
+shell.run("PortOS/bin/setup.lua")
+
+print("Checking for updates")
+
+print("Starting OS..")
+threading:killAllThreads()
+
+local function runShell()
+    term.clear()
+    term.setCursorPos(1, 1)
+    shell.run("shell")
+    events:stopEvents()
+    threading:stopThreadProcessor()
+    threading:killAllThreads()
+end
+
+threading:startThread(events.acceptEvents, events)
+threading:startThread(shell.run, "./PortOS/bin/ux/explorer")
+-- threading:startThread(runShell)
+
+threading:startThreadProcessor()
+
+print("Goodbye!")
+sleep(1)
+os.shutdown()
+./PortOS/bin/events.lua"3040"Flocal events = {
+    handleEvents = false,
+    threads = {}
+}
+
+local function addHandler(self, event, delegate, ...)
+    if type(delegate) ~= "function" then
+        error("Delegate expects function, received " .. type(delegate), 2)
+    end
+    if type(event) == "table" then
+        event = event.id
+    elseif type(event) ~= "string" then
+        error("Event expected to be a table or a string. Found "..type(event), 2)
+    end
+    if type(self[event]) ~= "table" then
+        self[event] = {}
+    end
+    local delegateData = {
+        delegate = delegate,
+        args = {...}
+    }
+    table.insert(self[event], delegateData)
+end
+events["addHandler"] = addHandler
+
+local function removeHandler(self, event, delegate)
+    if type(event) == "table" then
+        event = event.id
+    end
+    if type(self[event]) ~= "table" then
+        return false
+    else
+        for idx, del in pairs(self[event]) do
+            if del.delegate == delegate then
+                table.remove(self[event], idx)
+                return true
+            end
+        end
+
+        return false
+    end
+end
+events["removeHandler"] = removeHandler
+
+local function raiseEvent(self, ...)
+    os.queueEvent(self.id, ...)
+end
+
+local function createEvent(self)
+    local base = os.epoch("utc")
+    while self[tostring(base)] do
+        base = base + math.random(1000)
+    end
+
+    local newEvent = {
+        invoke = raiseEvent,
+        id = tostring(base)
+    }
+    self[tostring(base)] = {}
+    return newEvent
+end
+events["createEvent"] = createEvent
+
+local function deleteEvent(self, event)
+    if type(event) ~= "table" then
+        error("Event was not a custom event", 2)
+    elseif event.id == nil then
+        error("Event was not a custom event", 2)
+    elseif self[event.id] == nil then
+        error("Event was already removed", 2)
+    else
+        self[event.id] = nil
+    end
+end
+events["deleteEvent"] = deleteEvent
+
+local function processEvent(self, event, eventData)
+    if type(self[event]) == "table" then
+        for _, del in pairs(self[event]) do
+            local success, errorMsg = pcall(function()
+                if #del.args > 0 then
+                    del.delegate(table.unpack(del.args), table.unpack(eventData))
+                else
+                    del.delegate(table.unpack(eventData))
+                end
+            end)
+            if not success then
+                error(errorMsg, 0)
+            end
+        end
+    end
+end
+local function acceptEvents(self)
+    self.handleEvents = true
+    while self.handleEvents do
+        local eventData = {os.pullEvent()}
+        local event = eventData[1]
+
+        if event == ".portOS_cancelEvent" then
+            self.handleEvents = false
+            break
+        else
+            if self[event] then
+                threading:startThread(processEvent, self, event, eventData)
+            end
+        end
+    end
+end
+events["acceptEvents"] = acceptEvents
+
+local function stopEvents()
+    os.queueEvent(".portOS_cancelEvent")
+end
+events["stopEvents"] = stopEvents
+
+return events
+./PortOS/bin/registry.lua"828"Flocal registry = {
+	data = {
+		fileHandlers = {}
+	},
+	defaultLocation = "/PortOS/bin/data/default.reg"
+}
+
+function registry.addFileHandler(type, programPath, force)
+	if registry.data.fileHandlers[type] == nil or force then
+		registry.data.fileHandlers[type] = programPath
+		return true
+	else
+		return false
+	end
+end
+
+function registry.getFileHandler(type)
+	if registry.data.fileHandlers then
+		return registry.data.fileHandlers[type]
+	else
+		return nil
+	end
+end
+
+function registry.save()
+	local file = fs.open(registry.defaultLocation, "w")
+	file.write(textutils.serialise(registry.data))
+	file.close()
+end
+
+function registry.load()
+	if fs.exists(registry.defaultLocation) then
+		local file = fs.open(registry.defaultLocation, "r")
+		registry.data = textutils.unserialise(file.readAll())
+		file.close()
+	end
+end
+
+return registry./PortOS/bin/setup.lua"270"Frequire(".PortOS.lib.lang.keywords")
+_G["registry"] = require(".PortOS.bin.registry")
+registry.load()
+require(".PortOS.lib.data.table")
+-- require(".PortOS.lib.data.string")
+_G["threading"] = require(".PortOS.lib.threading")
+_G["events"] = require(".PortOS.bin.events")
+./PortOS/LICENSE"1068"FMIT License
+
+Copyright (c) 2023 Floral Soda
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+./PortOS/README.md"2617"F# PortOS
+PortOS is an operating framework designed for Dan200's [ComputerCraft](https://www.curseforge.com/minecraft/mc-mods/computercraft), SquidDev's [CC:Tweaked](https://modrinth.com/mod/cc-tweaked) and MerithTK's [CC:Restitched](https://modrinth.com/mod/cc-restitched). It is written in [Lua](https://www.lua.org/), designed to support all major versions of ComputerCraft using the version patching system, provided the [HTTP API](https://tweaked.cc/module/http.html) is enabled. I plan to make pre-made zips for popular versions, so an admin can drag and drop the contents into a PC to make copies if they do not want to enable the HTTP API.
+
+In its current state, PortOS would be better described as an Application Framework, though over time PortOS will bring technologies that would hopefully earn it the title of an Operating Framework and UI (The closest thing an program can get to an OS on ComputerCraft).
+
+PortOS is developed using CraftOS-PC, but is also tested in running versions of ComputerCraft. It is inspired by Microsoft's .NET Framework, Google's Android and various Linux distributions.
+
+PortOS aims to provide developers with a version agnostic, stable and featureful toolkit with which to develop their applications, including but not limited to:
+* Application and Controls
+* Task scheduling and Retention
+* Crash Handling
+* Cross-Restart processing (Continue running even after PC/Turtle restart)
+* Subscription-based event system
+* Hyperthreading (Multithreading but running on one core)
+* Cryptographic tools
+* Registry
+* Networking
+
+If you wish to enjoy these features, but need/want the portability into Computercraft systems that aren't running PortOS, there is an upcoming conversion tool that automatically converts everything into a single lua file with minimal wasted functionality. 
+There will also be, alternatively, a server version that lets you host PortOS on one machine, such that you only need to load a small lightweight app to download the required PortOS functions called.
+
+We also aim to provide a clean and user-friendly experience outside of development, with an innovative interaction system inspired by games consoles and phones, as well as a clean and powerful file explorer, app store and other such features.
+
+PortOS also adds some new features to Lua to make the use of objects easier, primarily the class system.
+
+## Wiki
+The wiki will be uploaded once PortOS is released. There is an Obsidian vault available, but I haven't uploaded it yet. Until there is a release and wiki, assume the documentation is out of date and take what it says with a grain of salt.

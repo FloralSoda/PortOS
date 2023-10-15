@@ -1,0 +1,9 @@
+{
+  files = {
+    "license",
+    "language",
+  },
+  preset = false,
+  name = "Language Features",
+  description = "Adds lower level language features, like the class system",
+}

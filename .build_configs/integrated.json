@@ -1,0 +1,33 @@
+{
+	"dependencies": [
+		"basic"
+	],
+	"preset": true,
+	"name": "Integrated",
+	"description": "The full package, minus the graphical features",
+	"files": {
+		"dir": {
+			"lib": {
+				"dir": {
+					"peripherals": {
+						"files": [
+							"audio.lua",
+							"network.lua"
+						]
+					}
+				},
+				"files": [
+					"glamour.lua",
+					"logger.lua"
+				]
+			},
+			"bin": {
+				"files": [
+					".bashrc",
+					"bash.lua",
+					"download.lua"
+				]
+			}
+		}
+	}
+}

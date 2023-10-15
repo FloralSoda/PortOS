@@ -1,0 +1,18 @@
+{
+	"dependencies": [ "license" ],
+	"name": "Language Features",
+	"description": "Adds lower level language features, like the class system",
+	"files": {
+		"dir": {
+			"lib": {
+				"dir": {
+					"lang": {
+						"files": [
+							"keywords.lua"
+						]
+					}
+				}
+			}
+		}
+	}
+}

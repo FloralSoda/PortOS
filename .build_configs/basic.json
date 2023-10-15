@@ -1,0 +1,43 @@
+{
+	"dependencies": [
+		"language",
+		"threading"
+	],
+	"name": "Basic",
+	"description": "The simplest install available. Only contains the simple class features, multithreading and the operating system's internal systems",
+	"files": {
+		"dir": {
+			"bin": {
+				"dir": {
+					"data": {
+						"files": [
+							"default.reg"
+						]
+					}	
+				},
+				"files": [
+					"boot.lua",
+					"events.lua",
+					"registry.lua",
+					"setup.lua"
+				]
+			},
+			"lib": {
+				"dir": {
+					"lang": {
+						"files": [
+							"keywords.lua"
+						]
+					}
+				},
+				"files": [
+					"threading.lua"
+				]
+			}
+		},
+		"files": [
+			"LICENSE",
+			"README.md"
+		]
+	}
+}

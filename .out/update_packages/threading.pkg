@@ -1,0 +1,9 @@
+{
+  files = {
+    "license",
+    "threading",
+  },
+  preset = false,
+  name = "Threading",
+  description = "Simulates Simultaneous Multithreading (SMT) capabilities utilising coroutines",
+}
