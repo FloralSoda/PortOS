@@ -205,12 +205,12 @@ class 'container' 'control' {
 
                     self.mouseclick:invoke(ctrl, data)
                     self.focusedctrl = ctrl
-                    hitctrl = true
+                    hitControl = true
                     break
                 end
             end
         end
-        if not hitctrl then
+        if not hitControl then
             if self.focusedctrl then
                 if self.focusedctrl.unfocus then
                     self.focusedctrl:unfocus(self.focusedctrl)
