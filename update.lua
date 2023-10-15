@@ -189,7 +189,7 @@ local function installPackage(pkg)
 	term.setCursorPos(1,1)
 	for _,dep in pairs(pkg.files) do
 		local dlpath = "https://raw.githubusercontent.com/FloralSoda/PortOS/"..branch.."/.out/bin/" .. dep .. ".ete"
-    	print("Downloading data for:", pkg)
+    	print("Downloading data for:", pkg.name)
     	local request = http.get(dlpath)
         local ete = request.readAll()
 		unpackETE(ete)
