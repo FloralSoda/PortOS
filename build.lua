@@ -50,31 +50,73 @@ local function createETEInternal(path, dir, fil)
     fil.write("\"" .. count .. "\"D") --Length and type
 
 	if dir["dir"] then
- 	    for dpath, data in pairs(dir["dir"]) do
+        local grabbed_dirs = {}
+        local star = false
+
+        for dpath, data in pairs(dir["dir"]) do
             --Fill out subdirectories
-			local path = path .. "/" .. dpath
-			if fs.isDir(path) then
-	        	createETEInternal(path, data, fil)
-			else
-				print("Directory \"",path,"\" was not found")
-			end
-	    end
+            local path = path .. "/" .. dpath
+            if fs.isDir(path) then
+                grabbed_dirs[dpath] = true
+                createETEInternal(path, data, fil)
+            elseif dpath == "*" then
+                --Take all subdirectories from this directory
+                star = true
+                break --No need to process any more, since it's already asking for everything
+            else
+                print("Directory \"", path, "\" was not found")
+            end
+        end
+        
+        if star then
+            local dirs = fs.list(path)
+            for _, dpath in pairs(dirs) do
+                if not grabbed_dirs[dpath] and fs.isDir(path .. "/" .. dpath) then
+                    local synth_data = {
+                        ["dir"] =  { "*" },
+                        ["files"] = { "*" }
+                    }
+                    createETEInternal(path .. "/" .. dpath, synth_data, fil)
+                end
+            end
+        end
 	end
 
-	if dir["files"] then
-    	for _, fpath in pairs(dir["files"]) do
+    if dir["files"] then
+        local add_file = function(path, fil)
+            local stream = fs.open(path, "r")
+            local data = stream.readAll()
+            stream.close()
+            fil.write(path)
+            fil.write("\"" .. (#data) .. "\"F")
+            fil.write(data)
+        end
+        
+        local grabbed_files = {}
+        local star = false
+
+        for _, fpath in pairs(dir["files"]) do
             --Fill out files
             local path = path .. "/" .. fpath
-			if fs.exists(path) then
-    	    	local op = fs.open(path, "r")
-	        	local data = op.readAll()
-	        	op.close()
-        		fil.write(path)
-        		fil.write("\"" .. (#data) .. "\"F")
-                fil.write(data)
+            if fs.exists(path) and not fs.isDir(path) then
+                grabbed_files[fpath] = true
+                add_file(path, fil)
+            elseif fpath == "*" then
+                --Take all files from this directory
+                star = true
+                break --No need to process any more, since it's already asking for everythings
             else
-				print("Path \"",path,"\" was not found")
-			end
+                print("Path \"", path, "\" was not found")
+            end
+        end
+        
+        if star then
+            local files = fs.list(path)
+            for _, fpath in pairs(files) do
+                if not grabbed_files[fpath] and not fs.isDir(path .. "/" .. fpath) then
+                    add_file(path .. "/" .. fpath, fil)
+                end
+            end
         end
 	end
 end

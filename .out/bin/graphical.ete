@@ -1,1 +1,845 @@
-./PortOS"0"D./PortOS/lib"0"D./PortOS/lib/controls"1"D./PortOS/lib/graphics"1"D
+./PortOS"0"D./PortOS/lib"0"D./PortOS/lib/controls"1"D./PortOS/lib/controls/application.lua"2018"Flocal control = require(".PortOS.lib.controls.control")
+local container = require ".PortOS.lib.controls.container"
+-- Properties and Class Definition
+class 'app' 'container' {
+    controls = {},
+    _oldBounds = {},
+    Background = colors.black,
+    focusedControl = nil,
+
+    -- Click Handling
+    handleMouse = function(self)
+        events:addHandler("mouse_click", self._mouseClickHandler, self)
+        events:addHandler("mouse_scroll", self._mouseClickHandler, self)
+    end,
+    unhandleMouse = function(self)
+        events:removeHandler("mouse_click", self._mouseClickHandler)
+        events:removeHandler("mouse_scroll", self._mouseClickHandler)
+    end,
+
+    -- Control
+    new = function(this)
+        this {
+            mouseclick = events:createEvent()
+        }
+    end,
+    run = function(self)
+        if self.threadId then
+            error("Application was already running! Create a copy if you want two", 2)
+        end
+
+        self:handleMouse()
+        self:invalidate()
+
+        self["threadId"] = threading:startTimer(0, self.draw, self)
+    end,
+    stop = function(self)
+        if self.threadId then
+            self:unhandleMouse()
+            threading:killThread(self["threadId"])
+            self:clear()
+            self.threadId = nil
+        end
+    end,
+    destroy = function(self)
+        for _, ctrl in pairs(self.controls) do
+            if ctrl.destroy then
+                ctrl:destroy(self)
+            end
+        end
+        self = nil
+    end,
+    pause = function(self)
+        if self.threadId and not self.paused then
+            self:unhandleMouse()
+            self.paused = true
+
+            threading:pauseThread(self.threadId)
+        end
+    end,
+    resume = function(self)
+        if self.threadId and self.paused then
+            self:handleMouse()
+            self:invalidate()
+
+            threading:resumeThread(self.threadId)
+            self.paused = false
+        else
+        end
+    end
+}
+---@diagnostic disable-next-line: undefined-global
+return app
+./PortOS/lib/controls/button.lua"1061"Flocal control = require(".PortOS.lib.controls.control")
+
+class 'button' 'control' {
+    Text = "Button",
+    Background = colors.lightGray,
+    Foreground = colors.black,
+    PressedColor = colors.gray,
+
+    draw = function(self)
+        paintutils.drawFilledBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+            self.bounds.Top + self.bounds.Height - 1, self.Background)
+        term.setTextColor(self.Foreground)
+        local toWrite = self.Text
+        if #self.Text > self.bounds.Width then
+            local difference = #self.Text - self.bounds.Width
+            toWrite = self.Text:sub(difference / 2, -(difference / 2))
+        end
+        term.setCursorPos(math.ceil(self.bounds.Left + ((self.bounds.Width - #self.Text) / 2)),
+            math.ceil((self.bounds.Top - 1) + (self.bounds.Height / 2)))
+        write(toWrite)
+    end,
+
+    new = function(this)
+        this.bounds {
+            Width = 8,
+            Height = 3
+        }
+    end
+}
+
+---@diagnostic disable-next-line: undefined-global
+return button
+./PortOS/lib/controls/container.lua"7339"Flocal control = require ".PortOS.lib.controls.control"
+class 'container' 'control' {
+	ctrls = {},
+    _oldBounds = {},
+    Background = colors.black,
+
+	-- Rendering
+	getctrlsInRect = function(ctrls, rect)
+		local roundRect = rect:truncate()
+		local output = {}
+
+		for _, c in pairs(ctrls) do
+			local roundBounds = c.bounds:truncate()
+			if roundBounds:intersectsWith(roundRect) then
+				table.insert(output, c)
+			end
+		end
+
+		return output
+	end,
+	getctrlsToConsider = function(ctrls, idx)
+		local toConsider = {
+			behind = table.sub(ctrls, 1, idx - 1),
+			before = {}
+		}
+		local toCheck = table.sub(ctrls, idx - 1)
+
+		for _, c in pairs(toCheck) do
+			if not c.updateGraphics then
+				table.insert(toConsider.before, c)
+			end
+		end
+
+		return toConsider
+	end,
+	renderctrl = function(self, ctrl, idx, force)
+		if ctrl.Enabled and (ctrl.updateGraphics or force) then
+			ctrl.updateGraphics = false
+			if ctrl.draw then
+				local predrawn = false
+				if self["_oldBounds"][ctrl[".screenuuid"]] then
+					local oldBounds = self["_oldBounds"][ctrl[".screenuuid"]]
+					local dx = oldBounds.Left ~= ctrl.bounds.Left
+					local dy = oldBounds.Top ~= ctrl.bounds.Top
+					local dw = oldBounds.Width ~= ctrl.bounds.Width
+					local dh = oldBounds.Height ~= ctrl.bounds.Height
+
+					if dx or dy or dw or dh then
+						local toConsider = self.getctrlsToConsider(self.ctrls, idx)
+						local toRedrawBehind = self.getctrlsInRect(toConsider.behind, oldBounds)
+						local toRedrawBefore = self.getctrlsInRect(toConsider.before, oldBounds)
+						paintutils.drawFilledBox(oldBounds.Left, oldBounds.Top, oldBounds.Left + oldBounds.Width - 1,
+							oldBounds.Top + oldBounds.Height - 1, self.Background)
+
+						for _, ctrl in pairs(toRedrawBehind) do
+							ctrl:draw()
+						end
+						ctrl:draw()
+						predrawn = true
+						for _, ctrl in pairs(toRedrawBefore) do
+							ctrl:draw()
+						end
+					end
+				end
+
+				self["_oldBounds"][ctrl[".screenuuid"]] = {
+					Left = ctrl.bounds.Left,
+					Top = ctrl.bounds.Top,
+					Width = ctrl.bounds.Width,
+					Height = ctrl.bounds.Height
+				}
+
+				if not predrawn then
+					local toRedraw = self.getctrlsInRect(self.getctrlsToConsider(self.ctrls, idx).before,
+						ctrl.bounds)
+
+					ctrl:draw()
+					for _, c in pairs(toRedraw) do
+						c:draw()
+					end
+				end
+			end
+		end
+	end,
+	draw = function(self, force)
+		local cursorBlink = term.getCursorBlink()
+		term.setCursorBlink(false)
+
+		for idx, ctrl in pairs(self.ctrls) do
+			self.renderctrl(self, ctrl, idx, force)
+		end
+
+		term.setCursorBlink(cursorBlink)
+    end,
+	invalidate = function(self, force)
+        term.setBackgroundColor(self.Background)
+        term.clear()
+
+        self:draw(force)
+    end,
+
+	-- Elements
+    addControl = function(self, ctrl)
+        if ctrl.extends == nil or not ctrl:extends(control) then
+            error("Expected type extending ctrl, got "..typeof(ctrl), 2)
+        end
+        ctrl[".screenuuid"] = os.epoch("utc") - #self.ctrls
+        table.insert(self.ctrls, ctrl)
+        ctrl:bind(self)
+    end,
+    removeControl = function(self, ctrl)
+        if ctrl.extends == nil or not ctrl:extends(control) then
+            error("Expected type extending ctrl, got "..typeof(ctrl), 2)
+        end
+        local loc = -1
+        for idx, con in pairs(self.ctrls) do
+            if con[".screenuuid"] == ctrl[".screenuuid"] then
+                loc = idx
+                break
+            end
+        end
+        if loc == -1 then
+            return false
+        else
+            if self.ctrls[loc].destroy then
+                if type(self.ctrls[loc].destroy) == "table" then
+                    for _, func in pairs(self.ctrls[loc].destroy) do
+                        func(self.ctrls[loc])
+                    end
+                else
+                    self.ctrls[loc]:destroy()
+                end
+            end
+            table.remove(self.ctrls, loc)
+            return true
+        end
+    end,
+    containsControl = function(self, ctrl)
+        if ctrl.extends == nil or not ctrl:extends(control) then
+            error("Expected type extending ctrl, got "..typeof(ctrl), 2)
+        end
+        if ctrl[".screenuuid"] then
+            for _, con in pairs(self.ctrls) do
+                if con[".screenuuid"] == ctrl[".screenuuid"] then
+                    return true
+                end
+            end
+        end
+
+        return false
+    end,
+    clear = function(self)
+        for _, ctrl in pairs(self.ctrls) do
+            self:removectrl(ctrl)
+        end
+        self._oldBounds = {}
+        self.focusedctrl = nil
+    end,
+    bringToFront = function(self, ctrl)
+        if ctrl.extends == nil or not ctrl:extends(control) then
+            error("Expected type extending ctrl, got "..typeof(ctrl), 2)
+        end
+        for idx, c in pairs(self.ctrls) do
+            if c[".screenuuid"] == ctrl[".screenuuid"] then
+                table.remove(self.ctrls, idx)
+                break
+            end
+        end
+        table.insert(self.ctrls, ctrl)
+    end,
+    pushToBack = function(self, ctrl)
+        if ctrl.extends == nil or not ctrl:extends(control) then
+            error("Expected type extending ctrl, got "..typeof(ctrl), 2)
+        end
+        for idx, c in pairs(self.ctrls) do
+            if c[".screenuuid"] == ctrl[".screenuuid"] then
+                table.remove(self.ctrls, idx)
+                break
+            end
+        end
+        table.insert(self.ctrls, 1, ctrl)
+    end,
+
+    _mouseClickHandler = function(self, event, button, x, y)
+        local hitControl = false
+        for _, ctrl in pairs(table.reverse(self.ctrls)) do
+            if ctrl.Enabled and ctrl.bounds.Left and ctrl.bounds.Width and 
+                ctrl.bounds.Top and ctrl.bounds.Height then
+
+                local inXBounds = ctrl.bounds.Left <= x and ctrl.bounds.Left + ctrl.bounds.Width - 1 >= x
+                local inYBounds = ctrl.bounds.Top <= y and ctrl.bounds.Top + ctrl.bounds.Height - 1 >= y
+
+                if inXBounds and inYBounds then
+                    if self.focusedctrl then
+                        if self.focusedctrl.unfocus then
+                            self.focusedctrl:unfocus(ctrl)
+                        end
+                    end
+                    local data = {
+                        scroll = event == "mouse_scroll",
+                        button = button,
+                        X = 1 + x - ctrl.bounds.Left,
+                        Y = 1 + y - ctrl.bounds.Top
+                    }
+
+                    self.mouseclick:invoke(ctrl, data)
+                    self.focusedctrl = ctrl
+                    hitControl = true
+                    break
+                end
+            end
+        end
+        if not hitControl then
+            if self.focusedctrl then
+                if self.focusedctrl.unfocus then
+                    self.focusedctrl:unfocus(self.focusedctrl)
+                end
+            end
+            self.focusedctrl = nil
+
+            local data = {
+                scroll = event == "mouse_scroll",
+                button = button,
+                X = x,
+                Y = y
+            }
+            self.mouseclick:invoke(nil, data)
+        end
+    end,
+
+	new = function(this)
+        events:addHandler(this.Click, this._mouseClickHandler, this)
+	end
+}
+
+---@diagnostic disable-next-line: undefined-global
+return container;
+./PortOS/lib/controls/control.lua"764"Flocal rect = require ".PortOS.lib.data.rect"
+class 'control' {
+    bounds = new 'rect'(1, 1, 1, 1),
+    Enabled = true,
+    updateGraphics = true,
+
+    clickHandler = function(self, _, control, data)
+        if control and type(control) == "table" and control[".screenuuid"] == self[".screenuuid"] then
+            self.Click:invoke(data)
+        end
+    end,
+    destroy = function(self)
+        events:removeHandler(self[".parentScreen"].mouseclick, self.clickHandler)
+    end,
+    bind = function(self, screen)
+        self[".parentScreen"] = screen
+        events:addHandler(self[".parentScreen"].mouseclick, self.clickHandler, self)
+    end,
+    new = function(this)
+        this {
+            Click = events:createEvent()
+        }
+    end
+}
+
+return control
+./PortOS/lib/controls/explorer.lua"7449"Flocal control = require(".PortOS.lib.controls.control")
+class 'explorer' 'control' {
+    NoFilesMessage = "There aren't any files here",
+    selectedColor = colors.lightBlue,
+    folderColor = colors.yellow,
+    fileColor = colors.blue,
+    background = colors.cyan,
+    textColor = colors.black,
+    border = colors.gray,
+    scroll = 1,
+    selected = -1,
+    timetravel = false,
+
+    sortDirectory = function(parent, fileList)
+        if type(parent) ~= "string" then
+            error("Parameter 1 'parent' expected type string, got "..typeof(parent), 2)
+        elseif typeof(fileList) ~= "table" then
+            error("Parameter 2 'fileList' expected type table, got "..typeof(fileList), 2)
+        end
+
+        local folders = {}
+        local files = {}
+        for _, file in pairs(fileList) do
+            local name = parent .. "/" .. file
+            if fs.isDir(name) then
+                table.insert(folders, file)
+            else
+                table.insert(files, file)
+            end
+        end
+
+        local output = {}
+        for _, folder in pairs(folders) do
+            table.insert(output, folder)
+        end
+        for _, file in pairs(files) do
+            table.insert(output, file)
+        end
+
+        return output
+    end,
+    draw = function(self)
+        if self.bounds.Width < 10 then
+            self.bounds.Width = 10
+        end
+        if self.bounds.Height < 5 then
+            self.bounds.Height = 5
+        end
+
+        paintutils.drawBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+            self.bounds.Top + self.bounds.Height - 1, self.border)
+        paintutils.drawFilledBox(self.bounds.Left + 1, self.bounds.Top + 1, self.bounds.Left + self.bounds.Width - 2,
+            self.bounds.Top + self.bounds.Height - 2, self.background)
+
+        term.setTextColor(self.textColor)
+
+        if fs.exists(self.fileLocation) and fs.isDir(self.fileLocation) then
+---@diagnostic disable-next-line: undefined-global
+            local files = explorer.sortDirectory(self.fileLocation, fs.list(self.fileLocation))
+
+            local upper = math.min(self.scroll + self.bounds.Height - 3, #files)
+            for idx = self.scroll, upper do
+                local file = files[idx]
+                local fileLoc = self.fileLocation .. "/" .. file
+
+                paintutils.drawLine(self.bounds.Left + 1, self.bounds.Top + idx - (self.scroll - 1),
+                    self.bounds.Left + self.bounds.Width - 2, self.bounds.Top + idx - (self.scroll - 1),
+                    self.selected == idx and self.selectedColor or self.background)
+
+                term.setCursorPos(self.bounds.Left + 1, self.bounds.Top + idx - (self.scroll - 1))
+                local icon = fs.isDir(fileLoc) and "#" or "O"
+                local iconColor = fs.isDir(fileLoc) and self.folderColor or self.fileColor
+
+                write("-")
+                term.setTextColor(iconColor)
+                write(icon .. " ")
+                term.setTextColor(self.textColor)
+                if #file > self.bounds.Width - 6 then
+                    write(file:sub(1, self.bounds.Width - 7) .. "..")
+                else
+                    write(file)
+                end
+            end
+        else
+            local noFiles = self.NoFilesMessage
+            local lines = string.wrap(noFiles, self.bounds.Width - 2)
+            for idx, line in pairs(lines) do
+                term.setCursorPos(self.bounds.Left + 1, self.bounds.Top + idx)
+                write(string.pad(line, self.bounds.Width - 2))
+            end
+        end
+    end,
+    navigate = function(self, location)
+        if type(location) ~= "string" then
+            error("Parameter 2 'location' expected type string, got "..typeof(location), 2)
+        end
+
+        if location and fs.exists(location) then
+            if location == self.fileLocation then
+                return false, "The explorer is already at this location"
+            end
+            if fs.isDir(location) then
+                if self.timetravel then
+                    self.timetravel = false
+                else
+                    table.insert(self.history, self.fileLocation)
+                    self.future = {}
+                end
+
+                self.changeDirectory:invoke(self, location, self.fileLocation)
+                self.fileLocation = location
+                self.selected = -1
+            else
+                self.selectFile:invoke(self, location)
+            end
+            self.updateGraphics = true
+
+            return true
+        else
+            return false, "The location could not be found"
+        end
+    end,
+    navigateBack = function(self)
+        if #self.history > 0 then
+            self.timetravel = true
+            local togo = self.history[#self.history]
+            self.history[#self.history] = nil
+            table.insert(self.future, self.fileLocation)
+            return self:navigate(togo)
+        end
+    end,
+    navigateNext = function(self)
+        if #self.future > 0 then
+            self.timetravel = true
+            local togo = self.future[#self.future]
+            self.future[#self.future] = nil
+            table.insert(self.history, self.fileLocation)
+            return self:navigate(togo)
+        end
+    end,
+    click = function(self, _, data)
+        local files = self.sortDirectory(self.fileLocation, fs.list(self.fileLocation))
+        self.updateGraphics = true
+        if data.scroll then
+            if self.scroll + data.button > 0 and self.scroll + data.button < (#files - (self.bounds.Height - 4)) then
+                self.scroll = self.scroll + data.button
+            end
+        elseif data.button == 1 then
+            if data.Y == 1 or (2 + #files - self.scroll < data.Y) then
+                self.selected = -1
+                return
+            elseif self.selected == self.scroll + data.Y - 2 then
+                self:navigate(self.fileLocation .. (self.fileLocation[-1] == "/" and "" or "/") .. files[self.selected])
+            else
+                self.selected = self.scroll + data.Y - 2
+            end
+        end
+    end,
+    openFile = function(self, path)
+        if path and fs.exists(path) then
+            local fileHandler = registry.getFileHandler(path:sub(-4))
+            if fileHandler then
+                print(self[".parentScreen"])
+                threading:startThread(function()
+                    shell.run(fileHandler, path)
+                    if self then
+                        self[".parentScreen"]:resume()
+                        self[".parentScreen"]:invalidate(true)
+                    end
+                end)
+                if self then
+                    self[".parentScreen"]:pause()
+                end
+                return true
+            else
+                return false, "File type has no handler"
+            end
+        else
+            return false, "Path could not be found"
+        end
+    end,
+    new = function(this, default)
+        this {
+            fileLocation = default or "/PortOS",
+            changeDirectory = events:createEvent(),
+            selectFile = events:createEvent(),
+            history = {},
+            future = {}
+        }
+        this.bounds {
+            Top = 1,
+            Left = 1,
+            Width = 7,
+            Height = 5
+        }
+
+        events:addHandler(this.Click, this.click, this)
+    end
+}
+
+---@diagnostic disable-next-line: undefined-global
+return explorer
+./PortOS/lib/controls/label.lua"742"Flocal control = require(".PortOS.lib.controls.control")
+
+class 'label' 'control' {
+    Text = "Label",
+    Background = colors.white,
+    Foreground = colors.black,
+    draw = function(self)
+        paintutils.drawFilledBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+            self.bounds.Top + self.bounds.Height - 1, self.Background)
+
+        term.setCursorPos(self.bounds.Left, self.bounds.Top)
+        term.setTextColor(self.Foreground)
+        write(self.Text)
+    end,
+    new = function(this, text)
+        this {
+            Text = text or this.Text
+        }
+        this.bounds {
+            Width = #this.Text
+        }
+    end
+}
+
+---@diagnostic disable-next-line: undefined-global
+return label
+./PortOS/lib/controls/rectangle.lua"520"Flocal control = require(".PortOS.lib.controls.control")
+
+class 'rectangle' 'control' {
+    Background = colors.lightGray,
+    draw = function(self)
+        paintutils.drawFilledBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+            self.bounds.Top + self.bounds.Height - 1, self.Background)
+    end,
+    new = function(this)
+        this.bounds {
+            Width = 8,
+            Height = 3
+        }
+    end
+}
+
+---@diagnostic disable-next-line: undefined-global
+return rectangle
+./PortOS/lib/controls/textbox.lua"8593"Flocal control = require(".PortOS.lib.controls.control")
+
+class 'textbox' 'control' {
+    Text = "",
+    CaretPosition = 1,
+    PortalPosition = 1,
+    Background = colors.white,
+    CaretColour = colors.lightBlue,
+    Foreground = colors.black,
+    BorderColour = colors.lightGray,
+    CaretBlinkSpeed = 1,
+    ShowBorder = true,
+    ShowCaret = false,
+    MultiLine = false,
+    blinkThreadId = -1,
+
+    draw = function(self)
+        if self.Enabled then
+            local textX = self.ShowBorder and self.bounds.Left + 1 or self.bounds.Left
+            local textY = self.ShowBorder and self.bounds.Top + 1 or self.bounds.Top
+
+            if self.ShowBorder then
+                paintutils.drawBox(self.bounds.Left, self.bounds.Top, self.bounds.Left + self.bounds.Width - 1,
+                    self.bounds.Top + self.bounds.Height - 1, self.BorderColour)
+            end
+
+            paintutils.drawLine(textX, textY, textX + self:getWriteableWidth() - 1, textY, self.Background)
+
+            if self.ShowCaret and (os.epoch() - self[".cursorBlinkTimer"]) >= (1 / self.CaretBlinkSpeed) * 1000 then
+                self[".cursorBlinkTimer"] = os.epoch()
+                if self[".cursorBlinkShow"] then
+                    self[".cursorBlinkShow"] = false
+                else
+                    self[".cursorBlinkShow"] = true
+                end
+            end
+
+            if #self.Text > 0 then
+
+                term.setCursorPos(textX, textY)
+
+                local drawableText = self.Text:sub(self.PortalPosition)
+                if #drawableText > self:getWriteableWidth() then
+                    drawableText = drawableText:sub(1, -(#drawableText - self:getWriteableWidth() + 1))
+                end
+
+                term.setTextColour(self.Foreground)
+                if self.ShowCaret and self[".cursorBlinkShow"] then
+                    if self.CaretPosition > #self.Text then
+                        term.setBackgroundColour(self.Background)
+                        term.write(drawableText)
+                        term.setBackgroundColor(self.CaretColour)
+                        term.write(" ")
+                    else
+                        local pos = (self.CaretPosition - self.PortalPosition) + 1
+
+                        if pos > 1 then
+                            term.setBackgroundColour(self.Background)
+                            term.write(drawableText:sub(1, pos - 1))
+                        end
+
+                        term.setBackgroundColour(self.CaretColour)
+                        term.write(drawableText:sub(pos, pos))
+
+                        if pos < #drawableText then
+                            term.setBackgroundColour(self.Background)
+                            term.write(drawableText:sub(pos + 1))
+                        end
+                    end
+                else
+                    write(drawableText)
+                end
+            else
+                if self.ShowCaret and self[".cursorBlinkShow"] then
+                    term.setCursorPos(textX, textY)
+                    term.setBackgroundColour(self.CaretColour)
+                    term.write(" ")
+                end
+            end
+        end
+    end,
+    unfocus = function(self)
+        events:removeHandler("key", self.keyDown)
+        events:removeHandler("char", self.charDown)
+        self.ShowCaret = false
+        self.updateGraphics = true
+        threading:killThread(self.blinkThreadId)
+    end,
+    click = function(self, _, data)
+        events:addHandler("key", self.keyDown, self)
+        events:addHandler("char", self.charDown, self)
+        if not self.ShowCaret then
+            self.blinkThreadId = threading:startTimer(0.3 / self.CaretBlinkSpeed, function()
+                self.updateGraphics = true
+            end)
+        end
+        self.ShowCaret = true
+
+        local x = data.X
+        local y = data.Y
+        if self.ShowBorder then
+            if y > 1 and y < self.bounds.Height and x > 1 and x < self.bounds.Width then
+                if x < #self.Text + 1 then
+                    self:setCaretPosition(x + self.PortalPosition - 2)
+                else
+                    self:setCaretPosition(#self.Text + 1)
+                end
+            end
+        else
+            if x < #self.Text + 1 then
+                self:setCaretPosition(x + self.PortalPosition - 1)
+            else
+                self:setCaretPosition(#self.Text + 1)
+            end
+        end
+    end,
+    keyDown = function(self, _, key)
+        if key == keys.left then
+            if self.CaretPosition > 1 then
+                self:setCaretPosition(self.CaretPosition - 1)
+                self.updateGraphics = true
+            end
+        elseif key == keys.right then
+            if self.CaretPosition < #self.Text + 1 then
+                self:setCaretPosition(self.CaretPosition + 1)
+                self.updateGraphics = true
+            end
+        elseif key == keys.backspace then
+            if #self.Text > 0 then
+                if self.CaretPosition == #self.Text + 1 then
+                    if #self.Text == 1 then
+                        self.Text = ""
+                    else
+                        self.Text = self.Text:sub(1, -2)
+                    end
+                    self:setCaretPosition(self.CaretPosition - 1)
+                    self.updateGraphics = true
+                elseif self.CaretPosition == 1 then
+                    return
+                else
+                    self.Text = self.Text:sub(1, self.CaretPosition - 2) .. self.Text:sub(self.CaretPosition)
+                    self:setCaretPosition(self.CaretPosition - 1)
+                    self.updateGraphics = true
+                end
+            end
+        elseif key == keys.delete then
+            if self.CaretPosition == #self.Text + 1 then
+                return
+            elseif self.CaretPosition == 1 then
+                self.Text = self.Text:sub(2)
+                self.updateGraphics = true
+            else
+                self.Text = self.Text:sub(1, self.CaretPosition - 1) .. self.Text:sub(self.CaretPosition + 1)
+                self.updateGraphics = true
+            end
+        end
+        self.KeyPressed:invoke(self, key)
+    end,
+    charDown = function(self, _, char)
+        self.updateGraphics = true
+        if self.CaretPosition == #self.Text + 1 then
+            self.Text = self.Text .. char
+        elseif self.CaretPosition == 1 then
+            self.Text = char .. self.Text
+        else
+            self.Text = self.Text:sub(1, self.CaretPosition - 1) .. char .. self.Text:sub(self.CaretPosition)
+        end
+
+        if self.CaretPosition < #self.Text + 1 then
+            self:setCaretPosition(self.CaretPosition + 1)
+        end
+    end,
+    setText = function(self, text)
+        self.Text = text
+        self:setCaretPosition(1)
+    end,
+    getWriteableWidth = function(self)
+        return self.ShowBorder and (self.bounds.Width - 2) or self.bounds.Width
+    end,
+    setCaretPosition = function(self, index, snapToLeft)
+        if index > #self.Text + 1 then
+            error("Index was greater than the length of the Textbox contents (" .. index .. " > " ..
+                      tostring(#self.Text + 1) .. ")", 2)
+        else
+            self.CaretPosition = index
+            if snapToLeft then
+                if self.CaretPosition > self.PortalPosition + 2 then
+                    self.PortalPosition = self.CaretPosition - 2
+                end
+            else
+                if self.CaretPosition >= self.PortalPosition + self:getWriteableWidth() then
+                    self.PortalPosition = math.max(index - (self:getWriteableWidth() - 2), 1)
+                end
+            end
+
+            if self.CaretPosition < self.PortalPosition then
+                self.PortalPosition = math.max(index - 2, 1)
+            end
+
+        end
+    end,
+    destroy = function(self)
+        control.destroy(self)
+        events:removeHandler("key", self.keyDown)
+        events:removeHandler("char", self.charDown)
+        events:deleteEvent(self.KeyPressed)
+        if self.blinkThreadId ~= -1 then
+            threading:killThread(self.blinkThreadId)
+        end
+    end,
+    new = function(this)
+        this {
+            KeyPressed = events:createEvent(),
+            [".cursorBlinkTimer"] = 0,
+            [".cursorBlinkShow"] = false
+        }
+        
+        this.bounds {
+            Top = 1,
+            Left = 1,
+            Width = 10,
+            Height = 3
+        }
+        events:addHandler(this.Click, this.click, this)
+    end
+}
+
+---@diagnostic disable-next-line: undefined-global
+return textbox
+./PortOS/lib/graphics"1"D./PortOS/lib/graphics/color.lua"0"F./PortOS/lib/graphics/colorpalette.lua"27"Fclass 'colorPalette' {
+	
+}
