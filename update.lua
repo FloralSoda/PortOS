@@ -1,14 +1,27 @@
 --The installer is currently found at https://pastebin.com/tKT0MVub
 
+--The branch to get from. Defaults to main. Use dev for nightly build
+local branch = "main"
+
+local args = { ... }
+if #args >= 1 and (args[1]:lower() == "dev" or args[1]:lower() == "nightly" or args[1]:lower() == "beta") then
+	branch = "dev"
+end
+
 -- Confirm required functions exist
 if http == nil then
     print("HTTP is not enabled. Please edit the config, or contact your server admin if you wish to install!")
     return
 end
 
-local path = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/.out/update_packages/list.dat"
+local path = "https://raw.githubusercontent.com/FloralSoda/PortOS/"..branch.."/.out/update_packages/list.dat"
 print("Downloading modules from github..")
 local request = http.get(path)
+if request == nil then
+    print("Failed to get package data. Cannot install :(")
+	print("Have you tried using the nightly build? (Run this with \"dev\" after it)")
+	return
+end
 local list = request.readAll()
 request.close()
 print("Data retrieved")
@@ -23,7 +36,7 @@ local function recursivelyMakeDir(dir)
 	fs.makeDir(cutoff)
 end
 
-local function readETE(data)
+local function unpackETE(data)
 	local pathFlag = true
 	local fileLengthFlag = false
 	local fileDataFlag = false
@@ -95,7 +108,7 @@ local pkg_list = textutils.unserialise(list)
 local pkgs = {}
 
 for _, pkg in pairs(pkg_list) do
-    local dlpath = "https://raw.githubusercontent.com/FloralSoda/PortOS/main/.out/update_packages/" .. pkg .. ".pkg"
+    local dlpath = "https://raw.githubusercontent.com/FloralSoda/PortOS/"..branch.."/.out/update_packages/" .. pkg .. ".pkg"
     print("Downloading info for:", pkg)
     local request = http.get(dlpath)
     local list = request.readAll()
@@ -134,9 +147,11 @@ local function menu(items, startY)
 	redraw()
 
 	while true do
-        local event, key = os.pullEvent("key")
+        local _, key = os.pullEvent("key")
 
-		if key == keys.up then
+		local previous = sidx
+
+        if key == keys.up then
             if sidx > 1 then
                 sidx = sidx - 1
             end
@@ -154,38 +169,49 @@ local function menu(items, startY)
                 windowOffset = windowOffset + 1
                 redraw()
             end
-		elseif key == keys.pageUp then
+        elseif key == keys.pageUp then
             windowOffset = math.max(windowOffset - ty, 0)
             redraw()
         elseif key == keys.pageDown then
             windowOffset = math.min(windowOffset + ty, #items)
-			redraw()
+            redraw()
         elseif key == keys.enter then
             return sidx, items[sidx]
-		end
+        end
+		
+		drawItem(items[previous], previous, sidx == previous, windowOffset)
+		drawItem(items[sidx], sidx, true, windowOffset)
 	end
 end
 
 local function installPackage(pkg)
-
+    term.clear()
+	term.setCursorPos(1,1)
+	for _,dep in pairs(pkg.files) do
+		local dlpath = "https://raw.githubusercontent.com/FloralSoda/PortOS/"..branch.."/.out/bin/" .. dep .. ".ete"
+    	print("Downloading data for:", pkg)
+    	local request = http.get(dlpath)
+        local ete = request.readAll()
+		unpackETE(ete)
+	end
 end
 
 local function compatMode()
 	local choosePackage = function(pkg)
 		term.clear()
 		term.setCursorPos(1,1)
-        print("Compatibility mode\n")
-        print("Package Details:")
-        print("Name:", pkg.name)
-        print("Requirements:")
+        term.write("Compatibility mode\n\n")
+        term.write("Package Details:\n")
+        term.write("Name:"..pkg.name.."\n")
+        term.write("Requirements:".."\n")
         for _, dep in pairs(pkg.files) do
-            print(" ", dep)
+            term.write(" "..dep.."\n")
         end
-        print("\n", pkg.description)
-        print("\nInstall?")
+        term.write("\n"..pkg.description.."\n")
+        term.write("\nInstall?\n")
 
         local _, y = term.getCursorPos()
-        local choice = menu({ "Yes, No" }, y)
+        local choice = menu({ "Yes", "No" }, y)
 		
 		return choice == 1
 	end
@@ -199,9 +225,9 @@ local function compatMode()
 		while true do
         	term.clear()
 			term.setCursorPos(1,1)
-        	print("Compatibility mode")
+        	term.write("Compatibility mode\n")
 
-			print("Select preset")
+			term.write("Select preset\n")
 		
             local sidx = menu(names, 3)
             if sidx == 1 then --User chose "Back"
@@ -211,7 +237,7 @@ local function compatMode()
 			local pkg = set[sidx - 1]
 			if choosePackage(pkg) then
                 installPackage(pkg)
-				return true
+				return pkg
 			end
 		end
 	end
@@ -233,27 +259,34 @@ local function compatMode()
 	while true do
         term.clear()
 		term.setCursorPos(1,1)
-    	print("Compatibility mode")
+    	term.write("Compatibility mode\n")
 
-    	print("Select install")
-    	print("---------------------")
+    	term.write("Select install\n")
+    	term.write("---------------------\n")
     	local sidx = menu({
         	"Presets",
-			"Custom"
+            "Custom",
+			"Exit"
     	}, 3)
 
-		if sidx == 1 then
-            if presets() then
+        if sidx == 1 then
+			local pkg = presets()
+            if pkg then
+				installPackage(pkg)
                 break
             end
         elseif sidx == 2 then
-			if custom() then
-				break
-			end
+			local pkg = custom()
+            if pkg then
+				installPackage(pkg)
+                break
+            end
+        elseif sidx == 3 then
+			break
 		end
 	end
 end
-
+term.setTextColor(colors.white)
 compatMode()
 
 -- print("Loading UI")
