@@ -26,14 +26,12 @@ local list = request.readAll()
 request.close()
 print("Data retrieved")
 
-local function recursivelyMakeDir(dir)
-    local cutoff = string.find(path, "/[^/]*$")
-    if cutoff ~= nil then
-        recursivelyMakeDir(dir:sub(1,cutoff))
-    elseif fs.isDir(cutoff) then
-		return
+local function makeDir(dir)
+	local currentDir = ""
+    for str in string.gmatch(dir, "([^" .. "/" .. "]+)") do
+        currentDir = currentDir .. str
+		fs.makeDir(currentDir)
     end
-	fs.makeDir(cutoff)
 end
 
 local function unpackETE(data)
@@ -83,7 +81,7 @@ local function unpackETE(data)
 					charactersRead = 0
                     print("Unpacking ", path)
 					local fileCutoff = string.find(path, "/[^/]*$")
-					recursivelyMakeDir(path:sub(1,fileCutoff))
+					makeDir(path:sub(1,fileCutoff))
 					file = fs.open(path, "w")
 				else
 					print("Creating directory at", path)
